@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { supabase } from "../lib/supabase";
 export default function Auth({ mode, onNavigate }) {
     const [step, setStep] = useState(mode === "register" ? "role" : "form");
     const [role, setRole] = useState(null);
@@ -7,16 +8,54 @@ export default function Auth({ mode, onNavigate }) {
     const [password, setPassword] = useState("");
     const [name, setName] = useState("");
     const [showPass, setShowPass] = useState(false);
-    const handleLogin = (e) => {
+    const [college, setCollege] = useState("");
+    const [department, setDepartment] = useState("");
+    const [semester, setSemester] = useState("");
+    const [phone, setPhone] = useState("");
+    const handleLogin = async (e) => {
         e.preventDefault();
+
+        const { error } = await supabase.auth.signInWithPassword({
+            email,
+            password,
+        });
+
+        if (error) {
+            alert(error.message);
+            return;
+        }
+
         onNavigate("menteeDashboard");
     };
-    const handleRegister = (e) => {
+    const handleRegister = async (e) => {
         e.preventDefault();
-        if (role === "mentor")
+
+        const { error } = await supabase.auth.signUp({
+            email,
+            password,
+            options: {
+                data: {
+                    name,
+                    role: role === "mentee" ? "student" : "mentor",
+                    org: college,
+                    dept: department,
+                    phone,
+                },
+            },
+        });
+
+        if (error) {
+            alert(error.message);
+            return;
+        }
+
+        alert("Registration successful!");
+
+        if (role === "mentor") {
             onNavigate("mentorDashboard");
-        else
+        } else {
             onNavigate("menteeDashboard");
+        }
     };
     return (<div className="min-h-screen bg-[#f8f9ff] flex">
       {/* Left panel */}
@@ -155,21 +194,43 @@ export default function Auth({ mode, onNavigate }) {
                   </div>
                   <div>
                     <label className="text-sm font-semibold text-slate-700 block mb-1.5">College</label>
-                    <input type="text" placeholder="IIT Bombay" className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 outline-none text-sm"/>
+                    <input
+                    type="text"
+                    value={college}
+                    onChange={e => setCollege(e.target.value)}
+                    placeholder="IIT Bombay"
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 outline-none text-sm"
+                  />
                   </div>
                   <div>
                     <label className="text-sm font-semibold text-slate-700 block mb-1.5">Department</label>
-                    <input type="text" placeholder="Computer Science" className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 outline-none text-sm"/>
+                    <input
+                    type="text"
+                    value={department}
+                    onChange={e => setDepartment(e.target.value)}
+                    placeholder="Computer Science"
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 outline-none text-sm"
+                  />
                   </div>
                   <div>
                     <label className="text-sm font-semibold text-slate-700 block mb-1.5">Semester</label>
-                    <select className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-indigo-400 outline-none text-sm bg-white">
+                    <select
+                    value={semester}
+                    onChange={e => setSemester(e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-indigo-400 outline-none text-sm bg-white"
+                   >
                       {[1, 2, 3, 4, 5, 6, 7, 8].map(s => <option key={s}>{s}th Semester</option>)}
                     </select>
                   </div>
                   <div>
                     <label className="text-sm font-semibold text-slate-700 block mb-1.5">Phone</label>
-                    <input type="tel" placeholder="+91 98765 43210" className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 outline-none text-sm"/>
+                   <input
+                    type="tel"
+                    value={phone}
+                    onChange={e => setPhone(e.target.value)}
+                    placeholder="+91 98765 43210"
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 outline-none text-sm"
+                  />
                   </div>
                   {role === "mentor" && (<>
                       <div className="col-span-2">
