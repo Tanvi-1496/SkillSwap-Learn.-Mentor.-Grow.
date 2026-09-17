@@ -12,10 +12,12 @@ export default function Auth({ mode, onNavigate }) {
     const [department, setDepartment] = useState("");
     const [semester, setSemester] = useState("");
     const [phone, setPhone] = useState("");
+    const [experience, setExperience] = useState("");
+    const [organization, setOrganization] = useState("");
     const handleLogin = async (e) => {
         e.preventDefault();
 
-        const { error } = await supabase.auth.signInWithPassword({
+        const { data , error } = await supabase.auth.signInWithPassword({
             email,
             password,
         });
@@ -25,12 +27,21 @@ export default function Auth({ mode, onNavigate }) {
             return;
         }
 
+        // //temp  /// DOOOO NOTTT UNCOMMENT THISSSS 
+        // const { data: profile, error: profileError } = await supabase
+        //     .from("student_profiles")
+        //     .select("*")
+        //     .eq("user_id", data.user.id)
+        //     .single();
+
+        // console.log("RLS TEST:", profile, profileError);
+
         onNavigate("menteeDashboard");
     };
     const handleRegister = async (e) => {
         e.preventDefault();
 
-        const { error } = await supabase.auth.signUp({
+        const { data , error } = await supabase.auth.signUp({
             email,
             password,
             options: {
@@ -40,6 +51,10 @@ export default function Auth({ mode, onNavigate }) {
                     org: college,
                     dept: department,
                     phone,
+                    semester,
+                    mentor_type: mentorType,
+                    experience,
+                    organization,
                 },
             },
         });
@@ -48,6 +63,37 @@ export default function Auth({ mode, onNavigate }) {
             alert(error.message);
             return;
         }
+        
+        // if (role === "mentee") {
+        //     const { error: profileError } = await supabase
+        //         .from("student_profiles")
+        //         .insert({
+        //             user_id: data.user.id,
+        //             semester: Number(semester)
+        //         });
+
+        //     if (profileError) {
+        //         alert(profileError.message);
+        //         return;
+        //     }
+        // }
+
+    //     if (role === "mentor") {
+    //     const { error: profileError } = await supabase
+    //         .from("mentor_profiles")
+    //         .insert({
+    //             user_id: data.user.id,
+    //             mentor_type: mentorType,
+    //             experience: Number(experience),
+    //             org: organization
+    //         });
+
+    //     if (profileError) {
+    //         alert(profileError.message);
+    //         return;
+    //     }
+    // }
+
 
         alert("Registration successful!");
 
@@ -219,7 +265,7 @@ export default function Auth({ mode, onNavigate }) {
                     onChange={e => setSemester(e.target.value)}
                     className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-indigo-400 outline-none text-sm bg-white"
                    >
-                      {[1, 2, 3, 4, 5, 6, 7, 8].map(s => <option key={s}>{s}th Semester</option>)}
+                      {[1, 2, 3, 4, 5, 6, 7, 8].map(s => <option key={s} value={s}>{s}th Semester</option>)}
                     </select>
                   </div>
                   <div>
@@ -243,11 +289,23 @@ export default function Auth({ mode, onNavigate }) {
                       </div>
                       <div>
                         <label className="text-sm font-semibold text-slate-700 block mb-1.5">Experience</label>
-                        <input type="text" placeholder="4 years" className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-indigo-400 outline-none text-sm"/>
+                        <input
+                        type="number"
+                        value={experience}
+                        onChange={e => setExperience(e.target.value)}
+                        placeholder="4"
+                        className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-indigo-400 outline-none text-sm"
+                    />
                       </div>
                       <div>
                         <label className="text-sm font-semibold text-slate-700 block mb-1.5">Organization</label>
-                        <input type="text" placeholder="Google / IIT Delhi" className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-indigo-400 outline-none text-sm"/>
+                        <input
+                        type="text"
+                        value={organization}
+                        onChange={e => setOrganization(e.target.value)}
+                        placeholder="Google / IIT Delhi"
+                        className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-indigo-400 outline-none text-sm"
+                    />
                       </div>
                     </>)}
                 </div>
