@@ -8,7 +8,12 @@ router.get("/", authMiddleware, async (req, res) => {
     try {
         const { data, error } = await supabase
             .from("users")
-            .select("*")
+            .select(`
+                *,
+                student_profiles (
+                    semester
+                )
+            `)
             .eq("id", req.user.id)
             .single();
 

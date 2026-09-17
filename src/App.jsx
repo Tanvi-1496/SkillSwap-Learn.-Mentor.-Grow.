@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import Landing from "./components/Landing";
 import Auth from "./components/Auth";
@@ -9,6 +10,7 @@ import MyBookings from "./components/MyBookings";
 import SearchMentors from "./components/SearchMentors";
 import MentorDashboard from "./components/MentorDashboard";
 import AdminDashboard from "./components/AdminDashboard";
+import Profile from "./components/Profile";
 export default function App() {
     const [page, setPage] = useState("landing");
     const nav = (p) => setPage(p);
@@ -41,6 +43,7 @@ export default function App() {
       {page === "booking" && <BookingFlow onNavigate={nav}/>}
       {page === "bookings" && <MyBookings onNavigate={nav}/>}
       {page === "search" && <SearchMentors onNavigate={nav}/>}
+      {page === "profile" && <Profile onNavigate={nav}/>}
       {page === "mentorDashboard" && <MentorDashboard onNavigate={nav}/>}
       {page === "adminDashboard" && <AdminDashboard onNavigate={nav}/>}
     </div>);
