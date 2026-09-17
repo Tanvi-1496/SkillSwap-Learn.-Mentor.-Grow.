@@ -1,4 +1,5 @@
-import { useState } from "react";
+// import { useState } from "react";
+import { useEffect, useState } from "react";
 import AIChat from "./AIChat";
 const navItems = [
     { id: "dashboard", label: "Dashboard", icon: "🏠" },
@@ -77,6 +78,26 @@ export default function MenteeDashboard({ onNavigate }) {
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [showNotifs, setShowNotifs] = useState(false);
     const [showAIChat, setShowAIChat] = useState(false);
+    const [profile, setProfile] = useState(null);
+
+    useEffect(() => {
+    console.log("MenteeDashboard loaded");
+
+    const token = localStorage.getItem("access_token");
+    console.log("Token:", token);
+
+          fetch("http://localhost:5000/profile", {
+              headers: {
+                  Authorization: `Bearer ${token}`
+              }
+          })
+              .then(res => res.json())
+              .then(data => {
+                  console.log("Profile:", data);
+                  setProfile(data.profile);
+              });
+    }, []);
+
     const handleNav = (id) => {
         setActiveNav(id);
         setSidebarOpen(false);

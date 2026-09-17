@@ -17,15 +17,34 @@ export default function Auth({ mode, onNavigate }) {
     const handleLogin = async (e) => {
         e.preventDefault();
 
-        const { data , error } = await supabase.auth.signInWithPassword({
+    const response = await fetch("http://localhost:5000/auth/login", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
             email,
-            password,
-        });
+            password
+        })
+    });
 
-        if (error) {
-            alert(error.message);
-            return;
-        }
+    const result = await response.json();
+    console.log("LOGIN RESULT:", result);
+
+    if (!response.ok) {
+        alert(result.error);
+        return;
+    }
+    localStorage.setItem("access_token", result.session.access_token);
+
+    const { data } = {
+        data: result
+    };
+
+        // if (error) {
+        //     alert(error.message);
+        //     return;
+        // }
 
         // //temp  /// DOOOO NOTTT UNCOMMENT THISSSS 
         // const { data: profile, error: profileError } = await supabase
@@ -36,33 +55,46 @@ export default function Auth({ mode, onNavigate }) {
 
         // console.log("RLS TEST:", profile, profileError);
 
-        onNavigate("menteeDashboard");
+        if (result.user.role === "mentor") {
+            onNavigate("mentorDashboard");
+        } else {
+            onNavigate("menteeDashboard");
+        }
     };
     const handleRegister = async (e) => {
         e.preventDefault();
-
-        const { data , error } = await supabase.auth.signUp({
+    const response = await fetch("http://localhost:5000/auth/register", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
             email,
             password,
-            options: {
-                data: {
-                    name,
-                    role: role === "mentee" ? "student" : "mentor",
-                    org: college,
-                    dept: department,
-                    phone,
-                    semester,
-                    mentor_type: mentorType,
-                    experience,
-                    organization,
-                },
-            },
-        });
+            name,
+            role: role === "mentee" ? "student" : "mentor",
+            org: college,
+            dept: department,
+            phone,
+            semester,
+            mentorType,
+            experience,
+            organization
+        })
+    });
 
-        if (error) {
-            alert(error.message);
-            return;
-        }
+    const result = await response.json();
+
+    if (!response.ok) {
+        alert(result.error);
+        return;
+    }
+    localStorage.setItem("access_token", result.session.access_token);
+
+        // if (error) {
+        //     alert(error.message);
+        //     return;
+        // }
         
         // if (role === "mentee") {
         //     const { error: profileError } = await supabase
