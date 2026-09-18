@@ -19,6 +19,28 @@ router.get("/", async (req, res) => {
 
         let mentors = data;
 
+        const mentorIds = mentors.map(mentor => mentor.user_id);
+
+        const { data: users, error: userError } = await supabase
+            .from("users")
+            .select("id, name")
+            .in("id", mentorIds);
+
+        if (userError) {
+            return res.status(500).json({
+                error: userError.message
+            });
+        }
+
+        mentors = mentors.map(mentor => {
+            const user = users.find(u => u.id === mentor.user_id);
+
+            return {
+                ...mentor,
+                name: user?.name || "Mentor"
+            };
+        });
+
         if (skill) {
             mentors = mentors.filter(mentor =>
                 mentor.skills?.some(
@@ -115,11 +137,11 @@ router.get("/:id", async (req, res) => {
         // data.name = user.name;
         // data.email = user.email;
         mentor.name = user.name;
-    `   mentor.email = user.email;
+       mentor.email = user.email;
 
 
         res.json({
-            mentor: data
+            mentor
         });
 
     } catch (error) {

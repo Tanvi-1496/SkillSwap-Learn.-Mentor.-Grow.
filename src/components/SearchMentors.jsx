@@ -21,9 +21,10 @@ export default function SearchMentors({ onNavigate }) {
             console.log("MENTORS:", data);
 
             const formattedMentors = data.mentors.map(m => ({
-                name: m.users?.name || "Mentor",
+                name: m.name || "Mentor",
+                id: m.user_id,
                 type: m.mentor_type,
-                avatar: (m.users?.name || "M").slice(0, 2).toUpperCase(),
+                avatar: (m.name || "M").slice(0, 2).toUpperCase(),
                 bg: "bg-indigo-600",
                 skills: m.skills || [],
                 rating: 0,
@@ -90,7 +91,7 @@ export default function SearchMentors({ onNavigate }) {
 
         {/* Results */}
         {view === "grid" ? (<div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {filtered.map(m => (<div key={m.name} className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm hover:shadow-lg hover:border-indigo-100 transition-all group">
+            {filtered.map(m => (<div key={m.id} className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm hover:shadow-lg hover:border-indigo-100 transition-all group">
                 <div className="flex items-start justify-between mb-4">
                   <div className={`w-12 h-12 ${m.bg} rounded-full flex items-center justify-center text-white font-bold`}>{m.avatar}</div>
                   <div className="text-right">
@@ -118,7 +119,7 @@ export default function SearchMentors({ onNavigate }) {
                 </div>
               </div>))}
           </div>) : (<div className="space-y-3">
-            {filtered.map(m => (<div key={m.name} className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm hover:shadow-md hover:border-indigo-100 transition-all flex items-center gap-4">
+            {filtered.map(m => (<div key={m.id} className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm hover:shadow-md hover:border-indigo-100 transition-all flex items-center gap-4">
                 <div className={`w-12 h-12 ${m.bg} rounded-full flex items-center justify-center text-white font-bold flex-shrink-0`}>{m.avatar}</div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
