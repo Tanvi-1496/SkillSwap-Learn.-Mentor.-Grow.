@@ -1,4 +1,5 @@
-import { useState } from "react";
+// import { useState } from "react";
+import { useEffect, useState } from "react";
 const allMentors = [
     { name: "Dr. Priya Sharma", type: "Faculty", avatar: "PS", bg: "bg-indigo-600", skills: ["Python", "ML", "Data Science"], rating: 4.9, exp: "8 years", availability: "Mon, Wed, Fri", match: 94, sessions: 120, org: "IIT Bombay" },
     { name: "Rahul Verma", type: "Senior Student", avatar: "RV", bg: "bg-violet-600", skills: ["DSA", "Java", "C++"], rating: 4.7, exp: "2 years", availability: "Weekends", match: 89, sessions: 48, org: "IIT Delhi" },
@@ -12,7 +13,31 @@ export default function SearchMentors({ onNavigate }) {
     const [filterType, setFilterType] = useState("All");
     const [filterRating, setFilterRating] = useState("All");
     const [view, setView] = useState("grid");
-    const filtered = allMentors.filter(m => {
+    const [mentors, setMentors] = useState([]);
+    useEffect(() => {
+        fetch("http://localhost:5000/mentors")
+            .then(res => res.json())
+            .then(data => {
+            console.log("MENTORS:", data);
+
+            const formattedMentors = data.mentors.map(m => ({
+                name: m.users?.name || "Mentor",
+                type: m.mentor_type,
+                avatar: (m.users?.name || "M").slice(0, 2).toUpperCase(),
+                bg: "bg-indigo-600",
+                skills: m.skills || [],
+                rating: 0,
+                exp: `${m.experience || 0} years`,
+                availability: "Check availability",
+                match: 0,
+                sessions: 0,
+                org: m.org || "Organization"
+            }));
+
+            setMentors(formattedMentors);
+        });
+    }, []);
+    const filtered = mentors.filter(m => {
         const q = search.toLowerCase();
         const matchSearch = !q || m.name.toLowerCase().includes(q) || m.skills.some(s => s.toLowerCase().includes(q)) || m.type.toLowerCase().includes(q);
         const matchType = filterType === "All" || m.type === filterType;

@@ -1,4 +1,5 @@
-import { useState } from "react";
+// import { useState } from "react";
+import { useEffect, useState } from "react";
 const reviews = [
     { name: "Aryan Shah", avatar: "AS", bg: "bg-indigo-500", rating: 5, text: "Dr. Sharma completely transformed my understanding of ML. Her structured approach and real-world project examples were invaluable.", date: "Aug 15, 2025" },
     { name: "Preethi Rao", avatar: "PR", bg: "bg-pink-500", rating: 5, text: "Found my first data science internship after three sessions. Her interview prep guidance was spot on!", date: "Jul 28, 2025" },
@@ -16,6 +17,18 @@ const availability = {
 export default function MentorProfile({ onNavigate }) {
     const [activeTab, setActiveTab] = useState("about");
     const [selectedDay, setSelectedDay] = useState("Mon");
+    const [mentor, setMentor] = useState(null);
+
+    useEffect(() => {
+          const mentorId = "aa2e17ae-e96e-41b4-96de-3e101511312e";
+
+          fetch(`http://localhost:5000/mentors/${mentorId}`)
+              .then(res => res.json())
+              .then(data => {
+                  console.log("MENTOR PROFILE:", data);
+                  setMentor(data.mentor);
+              });
+      }, []);
     return (<div className="min-h-screen bg-[#f8f9ff]">
       {/* Header Nav */}
       <header className="bg-white border-b border-slate-100 px-6 py-4 flex items-center gap-4 sticky top-0 z-40 shadow-sm">
@@ -30,14 +43,22 @@ export default function MentorProfile({ onNavigate }) {
           <div className="flex flex-col md:flex-row gap-6">
             <div className="relative flex-shrink-0">
               <div className="w-24 h-24 bg-indigo-600 rounded-2xl flex items-center justify-center text-white font-bold text-3xl shadow-lg">PS</div>
-              <div className="absolute -bottom-2 -right-2 bg-emerald-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">✓ Verified</div>
+                <div className="absolute -bottom-2 -right-2 bg-emerald-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">
+                    {mentor?.verified ? "✓ Verified" : "Not Verified"}
+                </div>
             </div>
             <div className="flex-1">
               <div className="flex items-start justify-between flex-wrap gap-4">
                 <div>
-                  <h1 className="text-2xl font-bold text-slate-900">Dr. Priya Sharma</h1>
-                  <p className="text-indigo-600 font-semibold">Verified Faculty Mentor</p>
-                  <p className="text-slate-500 text-sm mt-1">Indian Institute of Technology, Bombay</p>
+                  <h1 className="text-2xl font-bold text-slate-900">
+                      {mentor?.name || "Mentor"}
+                  </h1>
+                  <p className="text-indigo-600 font-semibold">
+                      {mentor?.mentor_type || "Mentor"}
+                  </p>
+                  <p className="text-slate-500 text-sm mt-1">
+                      {mentor?.org || "Organization"}
+                  </p>
                 </div>
                 <div className="flex flex-col items-end gap-2">
                   <div className="bg-indigo-50 border border-indigo-100 rounded-2xl px-4 py-2 text-center">
@@ -48,18 +69,19 @@ export default function MentorProfile({ onNavigate }) {
               </div>
               <div className="flex flex-wrap gap-5 mt-4 text-sm">
                 {[
-            { val: "4.9", label: "Rating", icon: "⭐" },
-            { val: "120", label: "Sessions", icon: "🗓" },
-            { val: "8 yrs", label: "Experience", icon: "💼" },
-            { val: "98%", label: "Response Rate", icon: "⚡" },
-        ].map(m => (<div key={m.label} className="flex items-center gap-1.5">
+                      { val: "4.9", label: "Rating", icon: "⭐" },
+                      { val: "120", label: "Sessions", icon: "🗓" },
+                      { val: `${mentor?.experience || 0} yrs`, label: "Experience", icon: "💼" },
+                      { val: "98%", label: "Response Rate", icon: "⚡" },
+                  ].map(m => (<div key={m.label} className="flex items-center gap-1.5">
                     <span>{m.icon}</span>
                     <strong className="text-slate-800">{m.val}</strong>
                     <span className="text-slate-500">{m.label}</span>
                   </div>))}
               </div>
               <div className="flex flex-wrap gap-2 mt-4">
-                {["Python", "Machine Learning", "Data Science", "SQL", "TensorFlow", "Deep Learning"].map(s => (<span key={s} className="bg-indigo-50 text-indigo-700 text-xs font-semibold px-3 py-1 rounded-full border border-indigo-100">{s}</span>))}
+                {(mentor?.skills || []).map(s =>
+                   (<span key={s} className="bg-indigo-50 text-indigo-700 text-xs font-semibold px-3 py-1 rounded-full border border-indigo-100">{s}</span>))}
               </div>
             </div>
           </div>
@@ -101,8 +123,8 @@ export default function MentorProfile({ onNavigate }) {
         {activeTab === "about" && (<div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm">
             <h2 className="font-bold text-slate-800 text-lg mb-3">About</h2>
             <p className="text-slate-600 leading-relaxed mb-4">
-              Dr. Priya Sharma is an Associate Professor in the Department of Computer Science and Engineering at IIT Bombay, with over 8 years of experience in teaching and research. Her expertise spans Machine Learning, Deep Learning, and Data Science, with a particular focus on practical applications in healthcare and finance.
-            </p>
+              {mentor?.bio || "No bio available."}
+          </p>
             <p className="text-slate-600 leading-relaxed">
               She has mentored over 120 students through academic projects, research internships, and industry placements. Her students have been placed at Google, Microsoft, Amazon, and various top-tier startups. She believes in a hands-on, project-based approach to learning.
             </p>
