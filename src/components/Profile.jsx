@@ -1,21 +1,42 @@
 import { useEffect, useState } from "react";
+import { supabase } from "../lib/supabase";
 
 export default function Profile() {
     const [profile, setProfile] = useState(null);
 
     useEffect(() => {
-        const token = localStorage.getItem("access_token");
+        const loadProfile = async () => {
+            const {
+                data: { session },
+                error: sessionError
+            } = await supabase.auth.getSession();
 
-        fetch("http://localhost:5000/profile", {
-            headers: {
-                Authorization: `Bearer ${token}`
+            if (sessionError) {
+                console.error("Supabase session error:", sessionError.message);
+                return;
             }
-        })
-            .then(res => res.json())
-            .then(data => {
-                console.log("PROFILE PAGE:", data);
-                setProfile(data.profile);
+
+            if (!session?.access_token) {
+                console.error("No active Supabase session found.");
+                return;
+            }
+
+            const response = await fetch("http://localhost:5000/profile", {
+                headers: {
+                    Authorization: `Bearer ${session.access_token}`
+                }
             });
+            const data = await response.json();
+
+            if (!response.ok) {
+                console.error("Profile request failed:", data.error);
+                return;
+            }
+
+            setProfile(data.profile);
+        };
+
+        loadProfile();
     }, []);
 
    return (

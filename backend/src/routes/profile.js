@@ -1,3 +1,4 @@
+import { generateProfileEmbedding } from "../services/aiService.js";
 import express from "express";
 import supabase from "../config/supabase.js";
 import authMiddleware from "../middleware/authMiddleware.js";
@@ -37,36 +38,133 @@ router.get("/", authMiddleware, async (req, res) => {
 router.put("/", authMiddleware, async (req, res) => {
     try {
         const {
-            name,
-            org,
-            dept,
-            phone
+            department,
+            semester,
+            skills,
+            careerGoal,
+            learningRequirement,
+            level
         } = req.body;
 
-        const { data, error } = await supabase
+        // 1. Update basic user information
+        const { data: user, error: userError } = await supabase
             .from("users")
             .update({
-                name,
-                org,
-                dept,
-                phone
+                dept: department
             })
             .eq("id", req.user.id)
             .select()
             .single();
 
-        if (error) {
+        if (userError) {
             return res.status(400).json({
-                error: error.message
+                error: userError.message
             });
         }
 
+        // 2. Check whether student profile already exists
+        const { data: existingProfile, error: profileCheckError } =
+            await supabase
+                .from("student_profiles")
+                .select("user_id")
+                .eq("user_id", req.user.id)
+                .maybeSingle();
+
+        if (profileCheckError) {
+            return res.status(500).json({
+                error: profileCheckError.message
+            });
+        }
+
+        let studentProfile;
+
+        // 3. Update existing student profile
+        if (existingProfile) {
+            const { data, error } = await supabase
+                .from("student_profiles")
+                .update({
+                    skills: skills || [],
+                    career_goal: careerGoal || "",
+                    learning_requirement: learningRequirement || "",
+                    level: level || "",
+                    semester: semester ? Number(semester) : null
+                })
+                .eq("user_id", req.user.id)
+                .select()
+                .single();
+
+            if (error) {
+                return res.status(400).json({
+                    error: error.message
+                });
+            }
+
+            studentProfile = data;
+        }
+
+        // 4. Create student profile if it doesn't exist
+        else {
+            const { data, error } = await supabase
+                .from("student_profiles")
+                .insert({
+                    user_id: req.user.id,
+                    skills: skills || [],
+                    career_goal: careerGoal || "",
+                    learning_requirement: learningRequirement || "",
+                    level: level || "",
+                    semester: semester ? Number(semester) : null
+                })
+                .select()
+                .single();
+
+            if (error) {
+                return res.status(400).json({
+                    error: error.message
+                });
+            }
+
+            studentProfile = data;
+        }
+
+        // 5. Create text for SBERT embedding
+        const embeddingText = `
+Skills: ${(studentProfile.skills || []).join(", ")}.
+Career goal: ${studentProfile.career_goal || ""}.
+Learning requirement: ${studentProfile.learning_requirement || ""}.
+Level: ${studentProfile.level || ""}.
+Semester: ${studentProfile.semester || ""}.
+        `.trim();
+
+        // 6. Generate/update AI embedding
+        try {
+            await generateProfileEmbedding(
+                req.user.id,
+                "student",
+                embeddingText
+            );
+
+            console.log(
+                "Student embedding updated successfully"
+            );
+        } catch (aiError) {
+            console.error(
+                "AI embedding error:",
+                aiError.message
+            );
+        }
+
+        // 7. Send response
         res.json({
             message: "Profile updated successfully",
-            profile: data
+            profile: {
+                ...user,
+                student_profile: studentProfile
+            }
         });
 
     } catch (error) {
+        console.error("Profile update error:", error);
+
         res.status(500).json({
             error: "Server error"
         });

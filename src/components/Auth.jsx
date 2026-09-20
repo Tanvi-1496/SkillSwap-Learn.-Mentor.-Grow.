@@ -14,126 +14,145 @@ export default function Auth({ mode, onNavigate }) {
     const [phone, setPhone] = useState("");
     const [experience, setExperience] = useState("");
     const [organization, setOrganization] = useState("");
-    const handleLogin = async (e) => {
-        e.preventDefault();
 
-    const response = await fetch("http://localhost:5000/auth/login", {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-            email,
-            password
-        })
-    });
+    const establishBrowserSession = async (session, action) => {
+        if (!session?.access_token || !session?.refresh_token) {
+            alert(
+                action === "registration"
+                    ? "Registration successful. Please confirm your email before signing in."
+                    : "Login succeeded, but no session was returned."
+            );
+            return false;
+        }
 
-    const result = await response.json();
-    console.log("LOGIN RESULT:", result);
+        const { error: sessionError } = await supabase.auth.setSession({
+            access_token: session.access_token,
+            refresh_token: session.refresh_token
+        });
 
-    if (!response.ok) {
-        alert(result.error);
-        return;
-    }
-    localStorage.setItem("access_token", result.session.access_token);
+        if (sessionError) {
+            console.error("Supabase session error:", sessionError.message);
+            alert("Authentication succeeded, but the browser session could not be created.");
+            return false;
+        }
 
-    const { data } = {
-        data: result
+        const {
+            data: { session: currentSession },
+            error: currentSessionError
+        } = await supabase.auth.getSession();
+
+        if (currentSessionError) {
+            console.error("Supabase session verification error:", currentSessionError.message);
+            alert("Authentication succeeded, but the browser session could not be verified.");
+            return false;
+        }
+
+        if (!currentSession?.access_token) {
+            alert("Authentication succeeded, but no active browser session was found.");
+            return false;
+        }
+
+        return true;
     };
 
-        // if (error) {
-        //     alert(error.message);
-        //     return;
-        // }
+    const getRole = (result) => {
+        const role =
+            result?.role ||
+            result?.user?.user_metadata?.role ||
+            result?.user?.app_metadata?.role;
 
-        // //temp  /// DOOOO NOTTT UNCOMMENT THISSSS 
-        // const { data: profile, error: profileError } = await supabase
-        //     .from("student_profiles")
-        //     .select("*")
-        //     .eq("user_id", data.user.id)
-        //     .single();
+        return typeof role === "string" ? role.toLowerCase() : null;
+    };
 
-        // console.log("RLS TEST:", profile, profileError);
+    const handleLogin = async (e) => {
+    e.preventDefault();
 
-        if (result.user.role === "mentor") {
-            onNavigate("mentorDashboard");
-        } else {
-            onNavigate("menteeDashboard");
+    try {
+        const response = await fetch("http://localhost:5000/auth/login", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                email,
+                password
+            })
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+            alert(result.error || "Login failed.");
+            return;
         }
+
+        const sessionCreated = await establishBrowserSession(
+            result.session,
+            "login"
+        );
+
+        if (!sessionCreated) {
+            return;
+        }
+
+        const userRole = getRole(result);
+        onNavigate(userRole === "mentor" ? "mentorDashboard" : "menteeDashboard");
+    } catch (error) {
+        console.error("Login error:", error.message);
+        alert("Unable to log in right now. Please try again.");
+    }
     };
     const handleRegister = async (e) => {
-        e.preventDefault();
-    const response = await fetch("http://localhost:5000/auth/register", {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-            email,
-            password,
-            name,
-            role: role === "mentee" ? "student" : "mentor",
-            org: college,
-            dept: department,
-            phone,
-            semester,
-            mentorType,
-            experience,
-            organization
-        })
-    });
+    e.preventDefault();
+    try {
+        const response = await fetch("http://localhost:5000/auth/register", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                email,
+                password,
+                name,
+                role: role === "mentee" ? "student" : "mentor",
+                org: college,
+                dept: department,
+                phone,
+                semester,
+                mentorType,
+                experience,
+                organization
+            })
+        });
 
-    const result = await response.json();
+        const result = await response.json();
 
-    if (!response.ok) {
-        alert(result.error);
-        return;
-    }
-    localStorage.setItem("access_token", result.session.access_token);
+        if (!response.ok) {
+            alert(result.error || "Registration failed.");
+            return;
+        }
 
-        // if (error) {
-        //     alert(error.message);
-        //     return;
-        // }
-        
-        // if (role === "mentee") {
-        //     const { error: profileError } = await supabase
-        //         .from("student_profiles")
-        //         .insert({
-        //             user_id: data.user.id,
-        //             semester: Number(semester)
-        //         });
+        const sessionCreated = await establishBrowserSession(
+            result.session,
+            "registration"
+        );
 
-        //     if (profileError) {
-        //         alert(profileError.message);
-        //         return;
-        //     }
-        // }
-
-    //     if (role === "mentor") {
-    //     const { error: profileError } = await supabase
-    //         .from("mentor_profiles")
-    //         .insert({
-    //             user_id: data.user.id,
-    //             mentor_type: mentorType,
-    //             experience: Number(experience),
-    //             org: organization
-    //         });
-
-    //     if (profileError) {
-    //         alert(profileError.message);
-    //         return;
-    //     }
-    // }
-
+        if (!sessionCreated) {
+            return;
+        }
 
         alert("Registration successful!");
 
-        if (role === "mentor") {
-            onNavigate("mentorDashboard");
-        } else {
-            onNavigate("menteeDashboard");
-        }
+        const registeredRole = getRole(result);
+        onNavigate(
+            registeredRole === "mentor"
+                ? "mentorDashboard"
+                : "menteeDashboard"
+        );
+    } catch (error) {
+        console.error("Registration error:", error.message);
+        alert("Unable to register right now. Please try again.");
+    }
     };
     return (<div className="min-h-screen bg-[#f8f9ff] flex">
       {/* Left panel */}

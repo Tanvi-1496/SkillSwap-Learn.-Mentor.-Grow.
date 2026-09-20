@@ -1,4 +1,5 @@
 // import { useState } from "react";
+import { supabase } from "../lib/supabase";
 import { useEffect, useState } from "react";
 import AIChat from "./AIChat";
 const navItems = [
@@ -11,6 +12,7 @@ const navItems = [
     { id: "feedback", label: "Feedback", icon: "⭐" },
     { id: "aiChat", label: "AI Assistant", icon: "✨" },
     { id: "profile", label: "Profile", icon: "👤" },
+    { id: "requirements", label: "Complete Profile", icon: "📝" },
     { id: "settings", label: "Settings", icon: "⚙️" },
 ];
 const stats = [
@@ -81,22 +83,60 @@ export default function MenteeDashboard({ onNavigate }) {
     const [profile, setProfile] = useState(null);
 
     useEffect(() => {
+    const loadProfile = async () => {
     console.log("MenteeDashboard loaded");
 
-    const token = localStorage.getItem("access_token");
-    console.log("Token:", token);
+    const {
+        data: { session },
+        error: sessionError
+    } = await supabase.auth.getSession();
 
-          fetch("http://localhost:5000/profile", {
-              headers: {
-                  Authorization: `Bearer ${token}`
-              }
-          })
+    if (sessionError) {
+        console.error("Supabase session error:", sessionError.message);
+        return;
+    }
+
+    const token = session?.access_token;
+    if (!token) {
+        console.error("No active Supabase session found.");
+        return;
+    }
+
+    fetch("http://localhost:5000/profile", {
+        headers: {
+            Authorization: `Bearer ${token}`
+        }
+    })
               .then(res => res.json())
               .then(data => {
                   console.log("Profile:", data);
                   setProfile(data.profile);
               });
+          };
+
+          loadProfile();
     }, []);
+
+    const handleLogout = async () => {
+        const { error } = await supabase.auth.signOut();
+
+        if (error) {
+            console.error("Logout error:", error.message);
+            alert("Unable to log out right now.");
+            return;
+        }
+
+        const {
+            data: { session }
+        } = await supabase.auth.getSession();
+
+        if (session) {
+            alert("Logout did not clear the active session.");
+            return;
+        }
+
+        onNavigate("landing");
+    };
 
     const handleNav = (id) => {
         setActiveNav(id);
@@ -111,6 +151,8 @@ export default function MenteeDashboard({ onNavigate }) {
             onNavigate("profile");
         else if (id === "aiChat")
             setShowAIChat(true);
+          else if (id === "requirements")
+             onNavigate("menteeRequirements");
     };
     return (<div className="flex h-screen bg-[#f8f9ff] overflow-hidden">
       {/* Sidebar */}
@@ -140,6 +182,13 @@ export default function MenteeDashboard({ onNavigate }) {
               <div className="text-xs text-slate-500">
                   {profile?.dept || "Department"} · {profile?.student_profiles?.[0]?.semester ? `${profile.student_profiles[0].semester}th Sem` : "Semester"}
               </div>
+              <button
+                type="button"
+                className="w-full mt-2 px-3 py-2 text-left text-sm font-medium text-slate-500 hover:bg-slate-50 hover:text-slate-800 rounded-xl"
+                onClick={handleLogout}
+              >
+                Log out
+              </button>
             </div>
           </div>
         </div>

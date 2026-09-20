@@ -3,6 +3,9 @@ import supabase from "../config/supabase.js";
 
 const router = express.Router();
 
+const getUserRole = user =>
+    user?.user_metadata?.role || user?.app_metadata?.role || null;
+
 router.post("/register", async (req, res) => {
     try {
         const {
@@ -46,6 +49,7 @@ router.post("/register", async (req, res) => {
         res.status(201).json({
             message: "Registration successful",
             user: data.user,
+            role: getUserRole(data.user),
             session: data.session
         });
 
@@ -75,6 +79,7 @@ router.post("/login", async (req, res) => {
         res.json({
             message: "Login successful",
             user: data.user,
+            role: getUserRole(data.user),
             session: data.session
         });
 

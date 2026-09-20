@@ -11,6 +11,7 @@ import SearchMentors from "./components/SearchMentors";
 import MentorDashboard from "./components/MentorDashboard";
 import AdminDashboard from "./components/AdminDashboard";
 import Profile from "./components/Profile";
+import MenteeRequirements from "./components/MenteeRequirements";
 export default function App() {
     const [page, setPage] = useState("landing");
     const nav = (p) => setPage(p);
@@ -46,5 +47,9 @@ export default function App() {
       {page === "profile" && <Profile onNavigate={nav}/>}
       {page === "mentorDashboard" && <MentorDashboard onNavigate={nav}/>}
       {page === "adminDashboard" && <AdminDashboard onNavigate={nav}/>}
+      {page === "menteeRequirements" && (
+    <MenteeRequirements onNavigate={nav}/>
+          )}
+       {page === "aiRecs" && <AIRecommendations onNavigate={nav}/>}
     </div>);
 }
