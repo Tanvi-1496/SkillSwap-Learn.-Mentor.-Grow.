@@ -102,16 +102,24 @@ export default function MenteeDashboard({ onNavigate }) {
         return;
     }
 
-    fetch("http://localhost:5000/profile", {
-        headers: {
-            Authorization: `Bearer ${token}`
+    try {
+        const response = await fetch("http://localhost:5000/profile", {
+            headers: {
+                Authorization: `Bearer ${token}`
+            }
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            console.error("Profile request failed:", data.error);
+            return;
         }
-    })
-              .then(res => res.json())
-              .then(data => {
-                  console.log("Profile:", data);
-                  setProfile(data.profile);
-              });
+
+        setProfile(data.profile);
+    } catch (error) {
+        console.error("Profile request error:", error.message);
+    }
           };
 
           loadProfile();

@@ -4,6 +4,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import profileRoutes from "./routes/profile.js";
 import mentorRoutes from "./routes/mentor.js";
+import recommendationRoutes from ".routes/recommendations.js";
 
 
 dotenv.config();
@@ -15,6 +16,7 @@ app.use(express.json());
 app.use("/auth", authRoutes);
 app.use("/profile", profileRoutes);
 app.use("/mentors", mentorRoutes);
+app.use("/recommendations", recommendationRoutes);
 
 app.get("/", (req, res) => {
     res.json({

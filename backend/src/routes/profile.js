@@ -2,12 +2,35 @@ import { generateProfileEmbedding } from "../services/aiService.js";
 import express from "express";
 import supabase from "../config/supabase.js";
 import authMiddleware from "../middleware/authMiddleware.js";
+import { createClient } from "@supabase/supabase-js";
 
 const router = express.Router();
 
+function getUserSupabase(req) {
+    const token = req.headers.authorization?.replace("Bearer ", "");
+
+    if (!token) {
+        throw new Error("Missing authorization token");
+    }
+
+    return createClient(
+        process.env.SUPABASE_URL,
+        process.env.SUPABASE_PUBLISHABLE_KEY,
+        {
+            global: {
+                headers: {
+                    Authorization: `Bearer ${token}`
+                }
+            }
+        }
+    );
+};
+
 router.get("/", authMiddleware, async (req, res) => {
     try {
-        const { data, error } = await supabase
+        const userSupabase = getUserSupabase(req);
+
+        const { data, error } = await userSupabase
             .from("users")
             .select(`
                 *,
@@ -29,6 +52,8 @@ router.get("/", authMiddleware, async (req, res) => {
         });
 
     } catch (error) {
+        console.error("Profile fetch error:", error);
+
         res.status(500).json({
             error: "Server error"
         });
@@ -37,6 +62,8 @@ router.get("/", authMiddleware, async (req, res) => {
 
 router.put("/", authMiddleware, async (req, res) => {
     try {
+        const userSupabase = getUserSupabase(req);
+
         const {
             department,
             semester,
@@ -47,14 +74,15 @@ router.put("/", authMiddleware, async (req, res) => {
         } = req.body;
 
         // 1. Update basic user information
-        const { data: user, error: userError } = await supabase
-            .from("users")
-            .update({
-                dept: department
-            })
-            .eq("id", req.user.id)
-            .select()
-            .single();
+        const { data: user, error: userError } =
+            await userSupabase
+                .from("users")
+                .update({
+                    dept: department
+                })
+                .eq("id", req.user.id)
+                .select()
+                .single();
 
         if (userError) {
             return res.status(400).json({
@@ -64,7 +92,7 @@ router.put("/", authMiddleware, async (req, res) => {
 
         // 2. Check whether student profile already exists
         const { data: existingProfile, error: profileCheckError } =
-            await supabase
+            await userSupabase
                 .from("student_profiles")
                 .select("user_id")
                 .eq("user_id", req.user.id)
@@ -80,18 +108,21 @@ router.put("/", authMiddleware, async (req, res) => {
 
         // 3. Update existing student profile
         if (existingProfile) {
-            const { data, error } = await supabase
-                .from("student_profiles")
-                .update({
-                    skills: skills || [],
-                    career_goal: careerGoal || "",
-                    learning_requirement: learningRequirement || "",
-                    level: level || "",
-                    semester: semester ? Number(semester) : null
-                })
-                .eq("user_id", req.user.id)
-                .select()
-                .single();
+            const { data, error } =
+                await userSupabase
+                    .from("student_profiles")
+                    .update({
+                        skills: skills || [],
+                        career_goal: careerGoal || "",
+                        learning_requirement: learningRequirement || "",
+                        level: level || "",
+                        semester: semester
+                            ? Number(semester)
+                            : null
+                    })
+                    .eq("user_id", req.user.id)
+                    .select()
+                    .single();
 
             if (error) {
                 return res.status(400).json({
@@ -104,18 +135,22 @@ router.put("/", authMiddleware, async (req, res) => {
 
         // 4. Create student profile if it doesn't exist
         else {
-            const { data, error } = await supabase
-                .from("student_profiles")
-                .insert({
-                    user_id: req.user.id,
-                    skills: skills || [],
-                    career_goal: careerGoal || "",
-                    learning_requirement: learningRequirement || "",
-                    level: level || "",
-                    semester: semester ? Number(semester) : null
-                })
-                .select()
-                .single();
+            const { data, error } =
+                await userSupabase
+                    .from("student_profiles")
+                    .insert({
+                        user_id: req.user.id,
+                        skills: skills || [],
+                        career_goal: careerGoal || "",
+                        learning_requirement:
+                            learningRequirement || "",
+                        level: level || "",
+                        semester: semester
+                            ? Number(semester)
+                            : null
+                    })
+                    .select()
+                    .single();
 
             if (error) {
                 return res.status(400).json({

@@ -55,7 +55,7 @@ export default function MenteeRequirements({ onNavigate }) {
                 method: "PUT",
                 headers: {
                     "Content-Type": "application/json",
-                    Authorization: `Bearer `
+                    Authorization: `Bearer ${token}`
                 },
                 body: JSON.stringify({
                     department,
