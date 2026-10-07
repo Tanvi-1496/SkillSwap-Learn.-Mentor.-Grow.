@@ -1,5 +1,6 @@
 import express from "express";
 import supabase from "../config/supabase.js";
+import authMiddleware from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
@@ -146,6 +147,316 @@ router.get("/", async (req, res) => {
     }
 });
 
+const ALLOWED_DAYS = [
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+    "Sunday"
+];
+
+// ---------------------------------------------------------------------------
+// GET /mentors/me (Get profile and availability for authenticated mentor)
+// ---------------------------------------------------------------------------
+router.get("/me", authMiddleware, async (req, res) => {
+    try {
+        const mentorId = req.user.id;
+
+        const { data: mentorProfile, error: profileError } = await supabase
+            .from("mentor_profiles")
+            .select("*")
+            .eq("user_id", mentorId)
+            .maybeSingle();
+
+        if (profileError) {
+            console.error("Mentor profile fetch error:", profileError);
+            return res.status(500).json({ error: profileError.message });
+        }
+
+        if (!mentorProfile) {
+            return res.status(404).json({
+                error: "Mentor profile not found"
+            });
+        }
+
+        const { data: user, error: userError } = await supabase
+            .from("users")
+            .select("id, name, email, org, dept")
+            .eq("id", mentorId)
+            .maybeSingle();
+
+        if (userError) {
+            console.error("User lookup error:", userError);
+            return res.status(500).json({ error: userError.message });
+        }
+
+        const { data: availability, error: availError } = await supabase
+            .from("availability")
+            .select("day, slots")
+            .eq("mentor_id", mentorId);
+
+        if (availError) {
+            console.error("Availability lookup error:", availError);
+            return res.status(500).json({ error: availError.message });
+        }
+
+        res.json({
+            profile: {
+                ...mentorProfile,
+                name: user?.name || "Mentor",
+                email: user?.email || "",
+                org: user?.org || mentorProfile.org || "",
+                dept: user?.dept || ""
+            },
+            availability: availability || []
+        });
+
+    } catch (error) {
+        console.error("GET /mentors/me error:", error);
+        res.status(500).json({ error: "Internal server error" });
+    }
+});
+
+// ---------------------------------------------------------------------------
+// GET /mentors/me/skills (Get skills for authenticated mentor)
+// ---------------------------------------------------------------------------
+router.get("/me/skills", authMiddleware, async (req, res) => {
+    try {
+        const mentorId = req.user.id;
+
+        const { data: mentorProfile, error: profileError } = await supabase
+            .from("mentor_profiles")
+            .select("skills")
+            .eq("user_id", mentorId)
+            .maybeSingle();
+
+        if (profileError) {
+            return res.status(500).json({ error: profileError.message });
+        }
+
+        if (!mentorProfile) {
+            return res.status(404).json({ error: "Mentor profile not found" });
+        }
+
+        res.json({
+            skills: mentorProfile.skills || []
+        });
+
+    } catch (error) {
+        console.error("GET /mentors/me/skills error:", error);
+        res.status(500).json({ error: "Internal server error" });
+    }
+});
+
+// ---------------------------------------------------------------------------
+// PUT /mentors/me/skills (Update skills for authenticated mentor)
+// ---------------------------------------------------------------------------
+router.put("/me/skills", authMiddleware, async (req, res) => {
+    try {
+        const mentorId = req.user.id;
+        const { skills } = req.body;
+
+        if (!Array.isArray(skills)) {
+            return res.status(400).json({
+                error: "skills must be an array of strings"
+            });
+        }
+
+        // Verify mentor profile exists
+        const { data: mentorProfile, error: profileError } = await supabase
+            .from("mentor_profiles")
+            .select("user_id")
+            .eq("user_id", mentorId)
+            .maybeSingle();
+
+        if (profileError) {
+            return res.status(500).json({ error: profileError.message });
+        }
+
+        if (!mentorProfile) {
+            return res.status(403).json({
+                error: "You are not authorized to update mentor skills"
+            });
+        }
+
+        // Clean, trim, and deduplicate skills (case-insensitive deduplication)
+        const seen = new Set();
+        const cleanedSkills = [];
+        for (const s of skills) {
+            if (typeof s === "string") {
+                const trimmed = s.trim();
+                const lower = trimmed.toLowerCase();
+                if (trimmed && !seen.has(lower)) {
+                    seen.add(lower);
+                    cleanedSkills.push(trimmed);
+                }
+            }
+        }
+
+        const { data: updated, error: updateError } = await supabase
+            .from("mentor_profiles")
+            .update({ skills: cleanedSkills })
+            .eq("user_id", mentorId)
+            .select("user_id, skills")
+            .single();
+
+        if (updateError) {
+            return res.status(500).json({ error: updateError.message });
+        }
+
+        res.json({
+            message: "Skills updated successfully",
+            skills: updated.skills
+        });
+
+    } catch (error) {
+        console.error("PUT /mentors/me/skills error:", error);
+        res.status(500).json({ error: "Internal server error" });
+    }
+});
+
+// ---------------------------------------------------------------------------
+// GET /mentors/me/availability (Get availability for authenticated mentor)
+// ---------------------------------------------------------------------------
+router.get("/me/availability", authMiddleware, async (req, res) => {
+    try {
+        const mentorId = req.user.id;
+
+        const { data: availability, error: availError } = await supabase
+            .from("availability")
+            .select("day, slots")
+            .eq("mentor_id", mentorId);
+
+        if (availError) {
+            return res.status(500).json({ error: availError.message });
+        }
+
+        res.json({
+            availability: availability || []
+        });
+
+    } catch (error) {
+        console.error("GET /mentors/me/availability error:", error);
+        res.status(500).json({ error: "Internal server error" });
+    }
+});
+
+// ---------------------------------------------------------------------------
+// PUT /mentors/me/availability (Save availability for authenticated mentor)
+// Handles single day { day, slots } OR multi-day schedule { schedule: [{ day, slots }] }
+// Strictly performs existence check followed by UPDATE or INSERT (no upsert)
+// ---------------------------------------------------------------------------
+router.put("/me/availability", authMiddleware, async (req, res) => {
+    try {
+        const mentorId = req.user.id;
+
+        // Verify mentor exists in mentor_profiles
+        const { data: mentorProfile, error: profileError } = await supabase
+            .from("mentor_profiles")
+            .select("user_id")
+            .eq("user_id", mentorId)
+            .maybeSingle();
+
+        if (profileError) {
+            return res.status(500).json({ error: profileError.message });
+        }
+
+        if (!mentorProfile) {
+            return res.status(403).json({
+                error: "You are not authorized to update mentor availability"
+            });
+        }
+
+        // Normalize incoming data to an array of day items
+        let dayItems = [];
+        if (Array.isArray(req.body.schedule)) {
+            dayItems = req.body.schedule;
+        } else if (Array.isArray(req.body.availability)) {
+            dayItems = req.body.availability;
+        } else if (req.body.day) {
+            dayItems = [{ day: req.body.day, slots: req.body.slots }];
+        } else {
+            return res.status(400).json({
+                error: "Please provide either a day with slots or a schedule array"
+            });
+        }
+
+        // Validate all days upfront
+        for (const item of dayItems) {
+            if (!item || !ALLOWED_DAYS.includes(item.day)) {
+                return res.status(400).json({
+                    error: `Invalid day "${item?.day}". Must be one of: ${ALLOWED_DAYS.join(", ")}`
+                });
+            }
+        }
+
+        // Process each day: check if exists, then UPDATE or INSERT
+        for (const item of dayItems) {
+            const day = item.day;
+            const slots = Array.isArray(item.slots) ? item.slots : [];
+
+            // 1. Check whether a row already exists for (mentor_id, day)
+            const { data: existingRows, error: checkError } = await supabase
+                .from("availability")
+                .select("mentor_id, day")
+                .eq("mentor_id", mentorId)
+                .eq("day", day);
+
+            if (checkError) {
+                console.error("Availability existence check error:", checkError);
+                return res.status(500).json({ error: checkError.message });
+            }
+
+            // 2. UPDATE existing row or INSERT new row
+            if (existingRows && existingRows.length > 0) {
+                const { error: updateError } = await supabase
+                    .from("availability")
+                    .update({ slots })
+                    .eq("mentor_id", mentorId)
+                    .eq("day", day);
+
+                if (updateError) {
+                    console.error("Availability update error:", updateError);
+                    return res.status(500).json({ error: updateError.message });
+                }
+            } else {
+                const { error: insertError } = await supabase
+                    .from("availability")
+                    .insert({
+                        mentor_id: mentorId,
+                        day,
+                        slots
+                    });
+
+                if (insertError) {
+                    console.error("Availability insert error:", insertError);
+                    return res.status(500).json({ error: insertError.message });
+                }
+            }
+        }
+
+        // Fetch refreshed availability to return in standard format
+        const { data: refreshed, error: refreshError } = await supabase
+            .from("availability")
+            .select("day, slots")
+            .eq("mentor_id", mentorId);
+
+        if (refreshError) {
+            return res.status(500).json({ error: refreshError.message });
+        }
+
+        res.json({
+            message: "Availability saved successfully",
+            availability: refreshed || []
+        });
+
+    } catch (error) {
+        console.error("PUT /mentors/me/availability error:", error);
+        res.status(500).json({ error: "Internal server error" });
+    }
+});
 
 router.get("/:id", async (req, res) => {
     try {
@@ -175,7 +486,7 @@ router.get("/:id", async (req, res) => {
         // Get mentor user information
         const { data: user, error: userError } = await supabase
             .from("users")
-            .select("name, email")
+            .select("name, email, org")
             .eq("id", id)
             .maybeSingle();
 
@@ -223,6 +534,7 @@ router.get("/:id", async (req, res) => {
             ...mentorProfile,
             name: user?.name || "Mentor",
             email: user?.email || "",
+            org: mentorProfile.org || user?.org || "",
             availability: availability || [],
             reviews: reviews || [],
             averageRating: Number(averageRating.toFixed(1)),

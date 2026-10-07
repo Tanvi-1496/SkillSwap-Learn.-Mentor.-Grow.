@@ -1,120 +1,135 @@
 import { useEffect, useState } from "react";
 
-export default function MentorProfile({ onNavigate , mentorId  }) {
+export default function MentorProfile({ onNavigate, mentorId, fromPage }) {
     const [activeTab, setActiveTab] = useState("about");
     const [selectedDay, setSelectedDay] = useState("Monday");
     const [mentor, setMentor] = useState(null);
 
-     const availability = {
-        Monday: mentor?.availability?.find(a => a.day === "Monday")?.slots || [],
-        Tuesday: mentor?.availability?.find(a => a.day === "Tuesday")?.slots || [],
-        Wednesday: mentor?.availability?.find(a => a.day === "Wednesday")?.slots || [],
-        Thursday: mentor?.availability?.find(a => a.day === "Thursday")?.slots || [],
-        Friday: mentor?.availability?.find(a => a.day === "Friday")?.slots || [],
-        Saturday: mentor?.availability?.find(a => a.day === "Saturday")?.slots || [],
-        Sunday: mentor?.availability?.find(a => a.day === "Sunday")?.slots || [],
+    const targetBack = fromPage === "aiRecs" ? "aiRecs" : fromPage === "menteeDashboard" ? "menteeDashboard" : "search";
+    const targetLabel = fromPage === "aiRecs" ? "AI Recommendations" : fromPage === "menteeDashboard" ? "Dashboard" : "Mentors Directory";
+
+    const getInitials = (name) => {
+        if (!name || typeof name !== "string") return "M";
+        const parts = name.trim().split(/\s+/).filter(Boolean);
+        if (parts.length === 0) return "M";
+        if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+        return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    };
+
+    const formatMentorType = (type) => {
+        if (!type) return "Mentor";
+        const clean = String(type).replace(/_/g, " ").toLowerCase();
+        return clean.replace(/\b\w/g, (c) => c.toUpperCase());
+    };
+
+    const availability = {
+        Monday: mentor?.availability?.find((a) => a.day === "Monday")?.slots || [],
+        Tuesday: mentor?.availability?.find((a) => a.day === "Tuesday")?.slots || [],
+        Wednesday: mentor?.availability?.find((a) => a.day === "Wednesday")?.slots || [],
+        Thursday: mentor?.availability?.find((a) => a.day === "Thursday")?.slots || [],
+        Friday: mentor?.availability?.find((a) => a.day === "Friday")?.slots || [],
+        Saturday: mentor?.availability?.find((a) => a.day === "Saturday")?.slots || [],
+        Sunday: mentor?.availability?.find((a) => a.day === "Sunday")?.slots || [],
     };
 
     useEffect(() => {
-    if (!mentorId) return;
+        if (!mentorId) return;
 
         fetch(`http://localhost:5000/mentors/${mentorId}`)
-            .then(res => res.json())
-            .then(data => {
-                console.log("MENTOR PROFILE:", data);
+            .then((res) => res.json())
+            .then((data) => {
                 setMentor(data.mentor);
             })
-            .catch(error => {
+            .catch((error) => {
                 console.error("Mentor profile fetch error:", error);
             });
     }, [mentorId]);
-    return (<div className="min-h-screen bg-[#f8f9ff]">
-      {/* Header Nav */}
-      <header className="bg-white border-b border-slate-100 px-6 py-4 flex items-center gap-4 sticky top-0 z-40 shadow-sm">
-        <button className="flex items-center gap-2 text-slate-500 hover:text-indigo-600 transition-colors" onClick={() => onNavigate("aiRecs")}>
-          ← AI Recommendations
-        </button>
-      </header>
 
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
-        {/* Profile Header */}
-        <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm mb-6">
-          <div className="flex flex-col md:flex-row gap-6">
-            <div className="relative flex-shrink-0">
-              <div className="w-24 h-24 bg-indigo-600 rounded-2xl flex items-center justify-center text-white font-bold text-3xl shadow-lg">PS</div>
-                <div className="absolute -bottom-2 -right-2 bg-emerald-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">
-                    {mentor?.verified ? "✓ Verified" : "Not Verified"}
-                </div>
-            </div>
+    const mentorInitials = getInitials(mentor?.name);
+
+    return (
+        <div className="min-h-screen bg-[#f5f7fc] text-[#172033]">
+            {/* Header Nav */}
+            <header className="bg-white border-b border-[#e5e7eb] px-6 py-4 flex items-center justify-between sticky top-0 z-40 shadow-2xs">
+                <button
+                    className="flex items-center gap-2 text-[#172033] hover:text-[#4f46e5] transition-colors text-sm font-semibold bg-[#f5f7fc] border border-[#e5e7eb] px-3.5 py-2 rounded-xl cursor-pointer"
+                    onClick={() => onNavigate(targetBack)}
+                >
+                    <span>←</span>
+                    <span>Back to {targetLabel}</span>
+                </button>
+                <span className="text-xs font-semibold px-2.5 py-1 bg-[#eef0ff] text-[#4f46e5] rounded-full border border-[#c7d2fe]/40">
+                    Verified Profile
+                </span>
+            </header>
+
+            <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
+                {/* Profile Header */}
+                <div className="bg-white rounded-2xl p-6 sm:p-8 border border-[#e5e7eb] shadow-xs mb-6">
+                    <div className="flex flex-col md:flex-row gap-6 items-start">
+                        <div className="relative flex-shrink-0">
+                            <div className="w-24 h-24 bg-[#4f46e5] rounded-full flex items-center justify-center text-white font-bold text-3xl shadow-sm">
+                                {mentorInitials}
+                            </div>
+                            <div className="absolute -bottom-1 -right-1 bg-emerald-500 text-white text-[11px] font-bold px-2 py-0.5 rounded-full border-2 border-white shadow-xs">
+                                {mentor?.verified ? "✓ Active" : "Active"}
+                            </div>
+                        </div>
             <div className="flex-1">
               <div className="flex items-start justify-between flex-wrap gap-4">
                 <div>
-                  <h1 className="text-2xl font-bold text-slate-900">
+                  <h1 className="text-2xl sm:text-3xl font-bold text-[#172033] tracking-tight">
                       {mentor?.name || "Mentor"}
                   </h1>
-                  <p className="text-indigo-600 font-semibold">
-                      {mentor?.mentor_type || "Mentor"}
+                  <p className="text-[#4f46e5] font-semibold text-sm mt-0.5">
+                      {formatMentorType(mentor?.mentor_type)}
                   </p>
-                  <p className="text-slate-500 text-sm mt-1">
-                      {mentor?.org || "Organization"}
+                  <p className="text-[#718096] text-sm mt-1">
+                      {mentor?.org || "SkillSwap Community"}
                   </p>
                 </div>
                 <div className="flex flex-col items-end gap-2">
-                  <div className="bg-indigo-50 border border-indigo-100 rounded-2xl px-4 py-2 text-center">
-                    <div className="text-2xl font-bold text-indigo-700">94%</div>
-                    <div className="text-indigo-500 text-xs font-semibold">Compatible with You</div>
+                  <div className="bg-[#eef0ff] border border-[#c7d2fe]/40 rounded-2xl px-4 py-2 text-center">
+                    <div className="text-2xl font-bold text-[#4f46e5]">94%</div>
+                    <div className="text-[#4f46e5] text-xs font-semibold">Match Score</div>
                   </div>
                 </div>
               </div>
-              <div className="flex flex-wrap gap-5 mt-4 text-sm">
+              <div className="flex flex-wrap gap-5 mt-4 text-sm text-[#718096]">
                 {[
-                      { val: "4.9", label: "Rating", icon: "⭐" },
-                      { val: "120", label: "Sessions", icon: "🗓" },
+                      {
+                          val: mentor?.averageRating > 0
+                              ? Number(mentor.averageRating).toFixed(1)
+                              : mentor?.rating > 0
+                              ? Number(mentor.rating).toFixed(1)
+                              : "New",
+                          label: "Rating",
+                          icon: "⭐"
+                      },
+                      { val: mentor?.sessions ?? mentor?.reviewCount ?? 0, label: "Sessions", icon: "🗓" },
                       { val: `${mentor?.experience || 0} yrs`, label: "Experience", icon: "💼" },
                       { val: "98%", label: "Response Rate", icon: "⚡" },
                   ].map(m => (<div key={m.label} className="flex items-center gap-1.5">
                     <span>{m.icon}</span>
-                    <strong className="text-slate-800">{m.val}</strong>
-                    <span className="text-slate-500">{m.label}</span>
+                    <strong className="text-[#172033]">{m.val}</strong>
+                    <span>{m.label}</span>
                   </div>))}
               </div>
-              <div className="flex flex-wrap gap-2 mt-4">
+              <div className="flex flex-wrap gap-1.5 mt-4">
                 {(mentor?.skills || []).map(s =>
-                   (<span key={s} className="bg-indigo-50 text-indigo-700 text-xs font-semibold px-3 py-1 rounded-full border border-indigo-100">{s}</span>))}
+                   (<span key={s} className="bg-[#eef0ff] text-[#4f46e5] text-xs font-medium px-3 py-1 rounded-full border border-[#c7d2fe]/30">{s}</span>))}
               </div>
             </div>
           </div>
 
-          {/* AI Compatibility breakdown */}
-          <div className="mt-5 bg-gradient-to-r from-indigo-50 to-violet-50 rounded-xl p-4 border border-indigo-100">
-            <div className="text-sm font-bold text-slate-700 mb-3">AI Compatibility Breakdown</div>
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-              {[
-            { label: "Skill Match", val: 92 },
-            { label: "Career Goal", val: 96 },
-            { label: "Experience", val: 95 },
-            { label: "Availability", val: 88 },
-            { label: "Rating", val: 98 },
-        ].map(b => (<div key={b.label}>
-                  <div className="flex justify-between text-xs mb-1">
-                    <span className="text-slate-600">{b.label}</span>
-                    <span className="font-bold text-indigo-700">{b.val}%</span>
-                  </div>
-                  <div className="h-1.5 bg-white rounded-full overflow-hidden">
-                    <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${b.val}%` }}/>
-                  </div>
-                </div>))}
-            </div>
-          </div>
-
-          <button className="w-full mt-5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3.5 rounded-xl transition-all shadow-sm hover:shadow-md text-base" onClick={() => onNavigate("booking")}>
-            Book a Session
+          <button className="w-full mt-6 bg-[#4f46e5] hover:bg-[#4338ca] text-white font-semibold py-3.5 rounded-xl transition-all shadow-xs text-sm cursor-pointer" onClick={() => onNavigate("booking", { mentorId: mentorId || mentor?.user_id })}>
+            Book a Mentoring Session →
           </button>
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 bg-white rounded-xl p-1 border border-slate-100 shadow-sm mb-6 overflow-x-auto">
-          {["about", "experience", "mentoring", "availability", "reviews"].map(tab => (<button key={tab} className={`flex-1 min-w-fit px-4 py-2 rounded-lg text-sm font-semibold transition-all capitalize ${activeTab === tab ? "bg-indigo-600 text-white shadow-sm" : "text-slate-600 hover:text-slate-800 hover:bg-slate-50"}`} onClick={() => setActiveTab(tab)}>
+        <div className="flex gap-1 bg-white rounded-xl p-1 border border-[#e5e7eb] shadow-xs mb-6 overflow-x-auto">
+          {["about", "experience", "availability", "reviews"].map(tab => (<button key={tab} className={`flex-1 min-w-fit px-4 py-2 rounded-lg text-sm font-semibold transition-all capitalize cursor-pointer ${activeTab === tab ? "bg-[#4f46e5] text-white shadow-xs" : "text-[#718096] hover:text-[#172033] hover:bg-[#f5f7fc]"}`} onClick={() => setActiveTab(tab)}>
               {tab}
             </button>))}
         </div>
@@ -170,101 +185,115 @@ export default function MentorProfile({ onNavigate , mentorId  }) {
             </div>
           </div>)}
 
-        {activeTab === "availability" && (<div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm">
-            <h2 className="font-bold text-slate-800 text-lg mb-5">Availability</h2>
+        {activeTab === "availability" && (
+          <div className="bg-white rounded-2xl p-6 border border-[#E5E7EB] shadow-xs">
+            <h2 className="font-bold text-[#172033] text-lg mb-5">Availability</h2>
             <div className="flex gap-2 flex-wrap mb-5">
-              {Object.entries(availability).map(([day, slots]) => (<button key={day} className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all ${slots.length === 0 ? "bg-slate-100 text-slate-400 cursor-not-allowed" : selectedDay === day ? "bg-indigo-600 text-white shadow-sm" : "bg-slate-100 text-slate-700 hover:bg-indigo-50 hover:text-indigo-700"}`} disabled={slots.length === 0} onClick={() => setSelectedDay(day)}>
+              {Object.entries(availability).map(([day, slots]) => (
+                <button
+                  key={day}
+                  className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
+                    slots.length === 0
+                      ? "bg-slate-100 text-slate-400 cursor-not-allowed"
+                      : selectedDay === day
+                      ? "bg-[#4F46E5] text-white shadow-xs"
+                      : "bg-[#F5F7FC] text-[#172033] hover:bg-[#EEF0FF] hover:text-[#4F46E5] border border-[#E5E7EB]"
+                  }`}
+                  disabled={slots.length === 0}
+                  onClick={() => setSelectedDay(day)}
+                >
                   {day}
                   {slots.length === 0 && <span className="ml-1 text-xs">(unavailable)</span>}
-                </button>))}
+                </button>
+              ))}
             </div>
             <div>
-              <p className="text-slate-600 text-sm font-semibold mb-3">{selectedDay} — Available slots:</p>
+              <p className="text-[#718096] text-sm font-semibold mb-3">{selectedDay} — Available slots:</p>
               <div className="flex flex-wrap gap-2">
-                {(availability[selectedDay] || []).map(slot => (<button key={slot} className="px-4 py-2 bg-indigo-50 hover:bg-indigo-600 hover:text-white text-indigo-700 font-semibold rounded-xl text-sm transition-all border border-indigo-100 hover:border-indigo-600">
+                {(availability[selectedDay] || []).map(slot => (
+                  <button
+                    key={slot}
+                    className="px-4 py-2 bg-[#EEF0FF] hover:bg-[#4F46E5] hover:text-white text-[#4F46E5] font-semibold rounded-xl text-sm transition-all border border-[#EEF0FF] hover:border-[#4F46E5]"
+                  >
                     {slot}
-                  </button>))}
+                  </button>
+                ))}
               </div>
-              <button className="mt-5 w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl transition-colors" onClick={() => onNavigate("booking")}>
+              <button
+                className="mt-5 w-full bg-[#4F46E5] hover:bg-[#4338CA] text-white font-bold py-3 rounded-xl transition-colors shadow-xs"
+                onClick={() => onNavigate("booking", { mentorId: mentorId || mentor?.user_id })}
+              >
                 Book a Session →
               </button>
             </div>
-          </div>)}
+          </div>
+        )}
 
-        <div className="space-y-4">
-
-  <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm">
-    <div className="flex items-center gap-4 mb-4">
-
-              <div>
-                <div className="text-4xl font-bold text-slate-900">
-                  {mentor?.averageRating || "0.0"}
-                </div>
-
-                <div className="text-yellow-400 text-lg">
-                  {"★".repeat(Math.round(mentor?.averageRating || 0))}
-                  {"☆".repeat(5 - Math.round(mentor?.averageRating || 0))}
-                </div>
-
-                <div className="text-slate-500 text-xs">
-                  Based on {mentor?.reviewCount || 0} reviews
+        {activeTab === "reviews" && (
+          <div className="space-y-4">
+            <div className="bg-white rounded-2xl p-6 border border-[#E5E7EB] shadow-xs">
+              <div className="flex items-center gap-4 mb-4">
+                <div>
+                  <div className="text-4xl font-bold text-[#172033]">
+                    {mentor?.averageRating || "0.0"}
+                  </div>
+                  <div className="text-amber-400 text-lg">
+                    {"★".repeat(Math.round(mentor?.averageRating || 0))}
+                    {"☆".repeat(5 - Math.round(mentor?.averageRating || 0))}
+                  </div>
+                  <div className="text-[#718096] text-xs mt-1">
+                    Based on {mentor?.reviewCount || 0} reviews
+                  </div>
                 </div>
               </div>
-
             </div>
-          </div>
 
-          {mentor?.reviews?.length > 0 ? (
-            mentor.reviews.map((review) => (
-              <div
-                key={review.id}
-                className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm"
-              >
-                <div className="flex items-start gap-3 mb-3">
-
-                  <div className="w-9 h-9 bg-indigo-500 rounded-full flex items-center justify-center text-white font-bold text-xs flex-shrink-0">
-                    {review.student_id?.slice(0, 2).toUpperCase() || "ST"}
-                  </div>
-
-                  <div className="flex-1">
-                    <div className="flex items-center justify-between">
-                      <span className="font-semibold text-slate-800">
-                        Student
-                      </span>
-
-                      <span className="text-xs text-slate-400">
-                        {review.created_at
-                          ? new Date(review.created_at).toLocaleDateString()
-                          : ""}
-                      </span>
+            {mentor?.reviews?.length > 0 ? (
+              mentor.reviews.map((review) => (
+                <div
+                  key={review.id}
+                  className="bg-white rounded-2xl p-5 border border-[#E5E7EB] shadow-xs"
+                >
+                  <div className="flex items-start gap-3 mb-3">
+                    <div className="w-9 h-9 bg-[#4F46E5] rounded-full flex items-center justify-center text-white font-bold text-xs flex-shrink-0">
+                      {review.student_id?.slice(0, 2).toUpperCase() || "ST"}
                     </div>
-
-                    <div className="text-yellow-400 text-sm">
-                      {"★".repeat(review.rating)}
-                      {"☆".repeat(5 - review.rating)}
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-[#172033]">
+                          Student
+                        </span>
+                        <span className="text-xs text-[#718096]">
+                          {review.created_at
+                            ? new Date(review.created_at).toLocaleDateString()
+                            : ""}
+                        </span>
+                      </div>
+                      <div className="text-amber-400 text-sm">
+                        {"★".repeat(review.rating)}
+                        {"☆".repeat(5 - review.rating)}
+                      </div>
                     </div>
                   </div>
-
+                  <p className="text-[#172033]/80 text-sm leading-relaxed">
+                    {review.text || "No review text provided."}
+                  </p>
                 </div>
-
-                <p className="text-slate-600 text-sm leading-relaxed">
-                  {review.text || "No review text provided."}
+              ))
+            ) : (
+              <div className="bg-white rounded-2xl p-6 border border-[#E5E7EB] shadow-xs text-center">
+                <p className="text-[#718096]">
+                  No reviews yet for this mentor.
                 </p>
               </div>
-            ))
-          ) : (
-            <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm text-center">
-              <p className="text-slate-500">
-                No reviews yet for this mentor.
-              </p>
-            </div>
-          )}
+            )}
+          </div>
+        )}
 
-        </div>
-
-        {activeTab === "mentoring" && (<div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm">
-            <h2 className="font-bold text-slate-800 text-lg mb-3">Mentoring Style & Approach</h2>
-            <p className="text-slate-600 leading-relaxed mb-5">
+        {activeTab === "mentoring" && (
+          <div className="bg-white rounded-2xl p-6 border border-[#E5E7EB] shadow-xs">
+            <h2 className="font-bold text-[#172033] text-lg mb-3">Mentoring Style & Approach</h2>
+            <p className="text-[#172033]/80 leading-relaxed mb-5">
               {mentor?.bio || "This mentor has not added mentoring details yet."}
             </p>
             <div className="grid md:grid-cols-2 gap-4">
@@ -273,15 +302,18 @@ export default function MentorProfile({ onNavigate , mentorId  }) {
                 { icon: "💬", title: "Responsive", desc: "Replies within 4 hours on weekdays." },
                 { icon: "📋", title: "Structured", desc: "Provides session notes and resources afterward." },
                 { icon: "🚀", title: "Hands-on", desc: "Real project work, not just theory." },
-            ].map(s => (<div key={s.title} className="bg-slate-50 rounded-xl p-4 flex items-start gap-3">
+              ].map(s => (
+                <div key={s.title} className="bg-[#F5F7FC] rounded-xl p-4 flex items-start gap-3 border border-[#E5E7EB]">
                   <span className="text-2xl">{s.icon}</span>
                   <div>
-                    <div className="font-semibold text-slate-800 text-sm">{s.title}</div>
-                    <div className="text-slate-500 text-xs mt-0.5">{s.desc}</div>
+                    <div className="font-semibold text-[#172033] text-sm">{s.title}</div>
+                    <div className="text-[#718096] text-xs mt-0.5">{s.desc}</div>
                   </div>
-                </div>))}
+                </div>
+              ))}
             </div>
-          </div>)}
+          </div>
+        )}
       </div>
     </div>);
 }

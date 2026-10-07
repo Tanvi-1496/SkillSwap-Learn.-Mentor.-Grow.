@@ -97,86 +97,106 @@ export default function BookingFlow({ onNavigate, mentorId }) {
     return result.toISOString().split("T")[0];
 };
 
+const [bookingError, setBookingError] = useState(null);
+const [isSubmitting, setIsSubmitting] = useState(false);
+
 const handleSubmit = async () => {
     try {
-        const { data: { user }, error: userError } = await supabase.auth.getUser();
+        setBookingError(null);
+        setIsSubmitting(true);
 
-            if (userError || !user) {
-                alert("Please login again before booking.");
-                return;
-            }
+        if (!mentorId) {
+            setBookingError("No mentor selected. Please select a mentor before booking.");
+            setIsSubmitting(false);
+            return;
+        }
 
-            const studentId = user.id;
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        const token = session?.access_token;
 
-        
+        if (sessionError || !token) {
+            setBookingError("Please log in again before booking.");
+            setIsSubmitting(false);
+            return;
+        }
+
         const bookingDate = getNextDateForDay(selectedDate);
 
         const response = await fetch("http://localhost:5000/bookings", {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
+                "Authorization": `Bearer ${token}`
             },
             body: JSON.stringify({
                 mentor_id: mentorId,
-                student_id: studentId,
                 topic: selectedTopic,
                 date: bookingDate,
                 time: selectedTime,
-                status: "pending",
             }),
         });
 
         const data = await response.json();
+
+        if (response.status === 409) {
+            setBookingError(data.error || "This time slot is no longer available. Please choose another time.");
+            setIsSubmitting(false);
+            return;
+        }
 
         if (!response.ok) {
             throw new Error(data.error || "Booking failed");
         }
 
         console.log("BOOKING CREATED:", data);
-
         setConfirmed(true);
 
     } catch (error) {
         console.error("Booking error:", error);
-        alert(error.message || "Failed to create booking.");
+        setBookingError(error.message || "Failed to create booking.");
+    } finally {
+        setIsSubmitting(false);
     }
 };
 
     if (confirmed) {
         return (
-            <div className="min-h-screen bg-[#f8f9ff] flex items-center justify-center p-6">
-                <div className="bg-white rounded-3xl p-10 shadow-xl border border-slate-100 max-w-md w-full text-center">
-                    <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center text-4xl mx-auto mb-5">
+            <div className="min-h-screen bg-[#F5F7FC] flex items-center justify-center p-6">
+                <div className="bg-white rounded-2xl p-8 sm:p-10 shadow-xs border border-[#E5E7EB] max-w-md w-full text-center">
+                    <div className="w-16 h-16 bg-[#EEF0FF] text-[#4F46E5] rounded-full flex items-center justify-center text-3xl mx-auto mb-5">
                         🎉
                     </div>
-                    <h1 className="text-2xl font-bold text-slate-900 mb-2">Booking Confirmed!</h1>
-                    <p className="text-slate-500 mb-6">
+                    <h1 className="text-2xl font-bold text-[#172033] mb-2">Booking Confirmed!</h1>
+                    <p className="text-[#718096] mb-6 text-sm">
                         Your session has been scheduled. {mentor?.name || "Your mentor"} will receive a notification shortly.
                     </p>
-                    <div className="bg-slate-50 rounded-2xl p-5 text-left space-y-3 mb-6">
+                    <div className="bg-[#F5F7FC] rounded-2xl p-5 text-left space-y-3 mb-6 border border-[#E5E7EB]">
                         {[
                             { label: "Mentor", val: mentor?.name || "Mentor" },
                             { label: "Date", val: selectedDate },
                             { label: "Time", val: selectedTime },
                             { label: "Topic", val: selectedTopic },
                             { label: "Duration", val: "60 minutes" },
-                            { label: "Mode", val: "Online (Zoom link will be shared)" },
+                            { label: "Mode", val: "Online (Link will be shared)" },
                         ].map((r) => (
                             <div key={r.label} className="flex items-center justify-between">
-                                <span className="text-slate-500 text-sm">{r.label}</span>
-                                <span className="font-semibold text-slate-800 text-sm">{r.val}</span>
+                                <span className="text-[#718096] text-sm">{r.label}</span>
+                                <span className="font-semibold text-[#172033] text-sm">{r.val}</span>
                             </div>
                         ))}
                     </div>
                     <div className="flex gap-3">
                         <button
-                            className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 rounded-xl transition-colors"
+                            className="flex-1 bg-[#4F46E5] hover:bg-[#4338CA] text-white font-semibold py-3 rounded-xl transition-colors shadow-xs text-sm"
                             onClick={() => onNavigate("bookings")}
                         >
-                            View Booking
+                            View My Bookings
                         </button>
-                        <button className="flex-1 border border-slate-200 hover:border-slate-300 text-slate-700 font-semibold py-3 rounded-xl transition-colors">
-                            Add to Calendar
+                        <button
+                            className="flex-1 border border-[#E5E7EB] bg-white hover:bg-[#F5F7FC] text-[#172033] font-semibold py-3 rounded-xl transition-colors text-sm"
+                            onClick={() => onNavigate("menteeDashboard")}
+                        >
+                            Return to Dashboard
                         </button>
                     </div>
                 </div>
@@ -185,44 +205,61 @@ const handleSubmit = async () => {
     }
 
     return (
-        <div className="min-h-screen bg-[#f8f9ff] px-4 py-8">
+        <div className="min-h-screen bg-[#F5F7FC] px-4 py-8">
             <div className="max-w-4xl mx-auto">
-                <div className="bg-white rounded-3xl shadow-xl border border-slate-100 p-6 md:p-8">
-                    <div className="flex items-center justify-between mb-8">
+                <div className="bg-white rounded-2xl shadow-xs border border-[#E5E7EB] p-6 md:p-8">
+                    <div className="flex items-center justify-between mb-8 pb-4 border-b border-[#E5E7EB]">
                         <div>
-                            <p className="text-sm font-medium text-indigo-600 uppercase tracking-wide">Booking flow</p>
-                            <h2 className="text-2xl font-bold text-slate-900">Book a session with {mentor?.name || "mentor"}</h2>
+                            <p className="text-xs font-semibold text-[#4F46E5] uppercase tracking-wider">Mentorship Booking</p>
+                            <h2 className="text-2xl font-bold text-[#172033]">Book session with {mentor?.name || "Mentor"}</h2>
                         </div>
                         <button
-                            onClick={() => onNavigate("mentors")}
-                            className="text-slate-500 hover:text-slate-700 text-sm font-medium"
+                            onClick={() => onNavigate("search")}
+                            className="text-[#718096] hover:text-[#172033] text-sm font-semibold px-3 py-1.5 rounded-lg hover:bg-[#F5F7FC] transition-colors border border-transparent hover:border-[#E5E7EB]"
                         >
-                            Cancel
+                            ✕ Cancel
                         </button>
                     </div>
 
+                    {bookingError && (
+                        <div className="mb-6 p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-sm flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <span>⚠️</span>
+                                <span>{bookingError}</span>
+                            </div>
+                            <button onClick={() => setBookingError(null)} className="text-xs font-bold text-rose-600 hover:text-rose-800">
+                                Dismiss
+                            </button>
+                        </div>
+                    )}
+
                     <div className="mb-8">
-                        <div className="flex items-center gap-3 overflow-x-auto pb-2">
-                            {steps.map((item) => (
-                                <div key={item.num} className="flex items-center min-w-0 flex-1">
-                                    <div
-                                        className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold ${
-                                            step === item.num
-                                                ? "bg-indigo-600 text-white"
-                                                : step > item.num
-                                                ? "bg-emerald-500 text-white"
-                                                : "bg-slate-100 text-slate-500"
-                                        }`}
-                                    >
-                                        {item.num}
+                        <div className="flex items-center justify-between gap-1 overflow-x-auto pb-2 scrollbar-none">
+                            {steps.map((item, idx) => (
+                                <div key={item.num} className="flex items-center flex-1 last:flex-initial">
+                                    <div className="flex items-center gap-2">
+                                        <div
+                                            className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-xs sm:text-sm font-bold flex-shrink-0 transition-colors ${
+                                                step === item.num
+                                                    ? "bg-[#4F46E5] text-white shadow-xs ring-4 ring-[#EEF0FF]"
+                                                    : step > item.num
+                                                    ? "bg-emerald-500 text-white"
+                                                    : "bg-[#F5F7FC] text-[#718096] border border-[#E5E7EB]"
+                                            }`}
+                                        >
+                                            {step > item.num ? "✓" : item.num}
+                                        </div>
+                                        <span
+                                            className={`text-xs whitespace-nowrap hidden sm:inline ${
+                                                step >= item.num ? "text-[#172033] font-semibold" : "text-[#718096] font-medium"
+                                            }`}
+                                        >
+                                            {item.label}
+                                        </span>
                                     </div>
-                                    <span
-                                        className={`ml-2 text-sm whitespace-nowrap ${
-                                            step >= item.num ? "text-slate-800 font-medium" : "text-slate-400"
-                                        }`}
-                                    >
-                                        {item.label}
-                                    </span>
+                                    {idx < steps.length - 1 && (
+                                        <div className={`flex-1 h-0.5 mx-2 min-w-4 ${step > item.num ? "bg-emerald-400" : "bg-[#E5E7EB]"}`} />
+                                    )}
                                 </div>
                             ))}
                         </div>
@@ -231,7 +268,7 @@ const handleSubmit = async () => {
                     {step === 1 && (
                         <div className="space-y-6">
                             <div>
-                                <h3 className="text-lg font-semibold text-slate-900 mb-4">Choose a date</h3>
+                                <h3 className="text-lg font-semibold text-[#172033] mb-4">Choose a date</h3>
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                                     {availableDays.length ? (
                                         availableDays.map((day) => (
@@ -241,16 +278,16 @@ const handleSubmit = async () => {
                                                 onClick={() => setSelectedDate(day.day)}
                                                 className={`rounded-2xl border p-4 text-left transition ${
                                                     selectedDate === day.day
-                                                        ? "border-indigo-500 bg-indigo-50 text-indigo-700"
-                                                        : "border-slate-200 hover:border-slate-300 text-slate-700"
+                                                        ? "border-[#4F46E5] bg-[#EEF0FF] text-[#4F46E5] shadow-xs"
+                                                        : "border-[#E5E7EB] bg-white hover:border-slate-300 text-[#172033]"
                                                 }`}
                                             >
                                                 <div className="font-semibold">{day.day}</div>
-                                                <div className="text-sm text-slate-500">{day.slots?.length || 0} slots available</div>
+                                                <div className="text-sm text-[#718096]">{day.slots?.length || 0} slots available</div>
                                             </button>
                                         ))
                                     ) : (
-                                        <div className="text-slate-500">No available dates yet.</div>
+                                        <div className="text-[#718096]">No available dates yet.</div>
                                     )}
                                 </div>
                             </div>
@@ -260,7 +297,7 @@ const handleSubmit = async () => {
                     {step === 2 && (
                         <div className="space-y-6">
                             <div>
-                                <h3 className="text-lg font-semibold text-slate-900 mb-4">Choose a time</h3>
+                                <h3 className="text-lg font-semibold text-[#172033] mb-4">Choose a time</h3>
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                                     {availableDays
                                         .filter((day) => day.day === selectedDate)
@@ -272,8 +309,8 @@ const handleSubmit = async () => {
                                                 onClick={() => setSelectedTime(slot)}
                                                 className={`rounded-xl border px-4 py-3 text-sm font-medium transition ${
                                                     selectedTime === slot
-                                                        ? "border-indigo-500 bg-indigo-50 text-indigo-700"
-                                                        : "border-slate-200 hover:border-slate-300 text-slate-700"
+                                                        ? "border-[#4F46E5] bg-[#EEF0FF] text-[#4F46E5] font-semibold"
+                                                        : "border-[#E5E7EB] bg-white hover:border-slate-300 text-[#172033]"
                                                 }`}
                                             >
                                                 {slot}
@@ -281,7 +318,7 @@ const handleSubmit = async () => {
                                         ))}
                                 </div>
                                 {!availableDays.some((day) => day.day === selectedDate) && (
-                                    <p className="text-sm text-slate-500 mt-3">Please select a date first.</p>
+                                    <p className="text-sm text-[#718096] mt-3">Please select a date first.</p>
                                 )}
                             </div>
                         </div>
@@ -290,7 +327,7 @@ const handleSubmit = async () => {
                     {step === 3 && (
                         <div className="space-y-6">
                             <div>
-                                <h3 className="text-lg font-semibold text-slate-900 mb-4">Select a topic</h3>
+                                <h3 className="text-lg font-semibold text-[#172033] mb-4">Select a topic</h3>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                     {topics.map((topic) => (
                                         <button
@@ -299,8 +336,8 @@ const handleSubmit = async () => {
                                             onClick={() => setSelectedTopic(topic)}
                                             className={`rounded-2xl border p-4 text-left transition ${
                                                 selectedTopic === topic
-                                                    ? "border-indigo-500 bg-indigo-50 text-indigo-700"
-                                                    : "border-slate-200 hover:border-slate-300 text-slate-700"
+                                                    ? "border-[#4F46E5] bg-[#EEF0FF] text-[#4F46E5] shadow-xs"
+                                                    : "border-[#E5E7EB] bg-white hover:border-slate-300 text-[#172033]"
                                             }`}
                                         >
                                             {topic}
@@ -314,15 +351,15 @@ const handleSubmit = async () => {
                     {step === 4 && (
                         <div className="space-y-6">
                             <div>
-                                <h3 className="text-lg font-semibold text-slate-900 mb-4">Share requirements</h3>
+                                <h3 className="text-lg font-semibold text-[#172033] mb-4">Share requirements</h3>
                                 <textarea
                                     value={requirements}
                                     onChange={(e) => setRequirements(e.target.value)}
                                     rows={5}
                                     placeholder="Tell your mentor what you want help with, your goals, or anything they should know before the session..."
-                                    className="w-full rounded-2xl border border-slate-200 p-4 text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400"
+                                    className="w-full rounded-2xl border border-[#E5E7EB] bg-[#F5F7FC] p-4 text-[#172033] placeholder:text-[#718096] focus:outline-none focus:ring-2 focus:ring-[#EEF0FF] focus:border-[#4F46E5] focus:bg-white transition"
                                 />
-                                <p className="text-sm text-slate-500 mt-2">Minimum 10 characters.</p>
+                                <p className="text-sm text-[#718096] mt-2">Minimum 10 characters.</p>
                             </div>
                         </div>
                     )}
@@ -330,23 +367,23 @@ const handleSubmit = async () => {
                     {step === 5 && (
                         <div className="space-y-6">
                             <div>
-                                <h3 className="text-lg font-semibold text-slate-900 mb-4">Review and confirm</h3>
-                                <div className="bg-slate-50 rounded-2xl p-5 space-y-3">
+                                <h3 className="text-lg font-semibold text-[#172033] mb-4">Review and confirm</h3>
+                                <div className="bg-[#F5F7FC] rounded-2xl p-5 space-y-3 border border-[#E5E7EB]">
                                     <div className="flex items-center justify-between">
-                                        <span className="text-slate-500">Mentor</span>
-                                        <span className="font-semibold text-slate-800">{mentor?.name || "Mentor"}</span>
+                                        <span className="text-[#718096]">Mentor</span>
+                                        <span className="font-semibold text-[#172033]">{mentor?.name || "Mentor"}</span>
                                     </div>
                                     <div className="flex items-center justify-between">
-                                        <span className="text-slate-500">Date</span>
-                                        <span className="font-semibold text-slate-800">{selectedDate}</span>
+                                        <span className="text-[#718096]">Date</span>
+                                        <span className="font-semibold text-[#172033]">{selectedDate}</span>
                                     </div>
                                     <div className="flex items-center justify-between">
-                                        <span className="text-slate-500">Time</span>
-                                        <span className="font-semibold text-slate-800">{selectedTime}</span>
+                                        <span className="text-[#718096]">Time</span>
+                                        <span className="font-semibold text-[#172033]">{selectedTime}</span>
                                     </div>
                                     <div className="flex items-center justify-between">
-                                        <span className="text-slate-500">Topic</span>
-                                        <span className="font-semibold text-slate-800">{selectedTopic}</span>
+                                        <span className="text-[#718096]">Topic</span>
+                                        <span className="font-semibold text-[#172033]">{selectedTopic}</span>
                                     </div>
                                 </div>
                             </div>
@@ -358,7 +395,7 @@ const handleSubmit = async () => {
                             type="button"
                             onClick={handleBack}
                             disabled={step === 1}
-                            className="px-5 py-3 rounded-xl border border-slate-200 text-slate-700 font-medium disabled:opacity-40 disabled:cursor-not-allowed"
+                            className="px-5 py-3 rounded-xl border border-[#E5E7EB] bg-white text-[#172033] font-medium hover:bg-[#F5F7FC] disabled:opacity-40 disabled:cursor-not-allowed transition"
                         >
                             Back
                         </button>
@@ -368,7 +405,7 @@ const handleSubmit = async () => {
                                 type="button"
                                 onClick={handleNext}
                                 disabled={!canNext()}
-                                className="px-5 py-3 rounded-xl bg-indigo-600 text-white font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                                className="px-5 py-3 rounded-xl bg-[#4F46E5] hover:bg-[#4338CA] text-white font-medium disabled:opacity-50 disabled:cursor-not-allowed transition shadow-xs"
                             >
                                 Next
                             </button>
@@ -376,7 +413,7 @@ const handleSubmit = async () => {
                             <button
                                 type="button"
                                 onClick={handleSubmit}
-                                className="px-5 py-3 rounded-xl bg-indigo-600 text-white font-medium"
+                                className="px-5 py-3 rounded-xl bg-[#4F46E5] hover:bg-[#4338CA] text-white font-medium transition shadow-xs"
                             >
                                 Confirm Booking
                             </button>

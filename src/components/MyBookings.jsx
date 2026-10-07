@@ -1,89 +1,400 @@
-import { useState } from "react";
-const bookings = {
-    Upcoming: [
-        { mentor: "Dr. Priya Sharma", avatar: "PS", bg: "bg-indigo-600", topic: "ML Model Evaluation", date: "Tomorrow, Aug 26", time: "5:00 PM – 6:00 PM", status: "Confirmed", statusColor: "bg-emerald-100 text-emerald-700" },
-        { mentor: "Rahul Verma", avatar: "RV", bg: "bg-violet-600", topic: "Graph Algorithms", date: "Sat, Aug 30", time: "10:00 AM – 11:00 AM", status: "Confirmed", statusColor: "bg-emerald-100 text-emerald-700" },
-    ],
-    Pending: [
-        { mentor: "Anjali Mehta", avatar: "AM", bg: "bg-pink-600", topic: "React Best Practices", date: "Sun, Aug 31", time: "3:00 PM – 4:00 PM", status: "Pending Acceptance", statusColor: "bg-amber-100 text-amber-700" },
-    ],
-    Completed: [
-        { mentor: "Dr. Priya Sharma", avatar: "PS", bg: "bg-indigo-600", topic: "Python for Data Science", date: "Mon, Aug 18", time: "5:00 PM – 6:00 PM", status: "Completed", statusColor: "bg-slate-100 text-slate-600" },
-        { mentor: "Karan Patel", avatar: "KP", bg: "bg-emerald-600", topic: "AWS S3 & Lambda", date: "Wed, Aug 13", time: "7:00 PM – 8:00 PM", status: "Completed", statusColor: "bg-slate-100 text-slate-600" },
-        { mentor: "Rahul Verma", avatar: "RV", bg: "bg-violet-600", topic: "Binary Search Trees", date: "Sat, Aug 9", time: "10:00 AM – 11:00 AM", status: "Completed", statusColor: "bg-slate-100 text-slate-600" },
-    ],
-    Cancelled: [
-        { mentor: "Anjali Mehta", avatar: "AM", bg: "bg-pink-600", topic: "UI/UX Principles", date: "Wed, Aug 6", time: "4:00 PM – 5:00 PM", status: "Cancelled", statusColor: "bg-red-100 text-red-600" },
-    ],
-};
+import { useEffect, useState } from "react";
+import { supabase } from "../lib/supabase";
+
+function formatTimeDisplay(timeStr) {
+    if (!timeStr) return "";
+    const match = String(timeStr).trim().match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+    if (match) {
+        let h = parseInt(match[1], 10);
+        const m = match[2];
+        const ampm = h >= 12 ? "PM" : "AM";
+        h = h % 12;
+        h = h ? h : 12;
+        return `${h}:${m} ${ampm}`;
+    }
+    return timeStr;
+}
+
+function getInitials(name) {
+    if (!name || typeof name !== "string") return "M";
+    const parts = name.trim().split(/\s+/).filter(Boolean);
+    if (parts.length === 0) return "M";
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
 export default function MyBookings({ onNavigate }) {
     const [tab, setTab] = useState("Upcoming");
-    return (<div className="min-h-screen bg-[#f8f9ff]">
-      <header className="bg-white border-b border-slate-100 px-6 py-4 flex items-center gap-4 sticky top-0 z-40 shadow-sm">
-        <button className="flex items-center gap-2 text-slate-500 hover:text-indigo-600 transition-colors" onClick={() => onNavigate("menteeDashboard")}>
-          ← Dashboard
-        </button>
-        <div className="h-5 w-px bg-slate-200"/>
-        <span className="font-bold text-slate-800">My Bookings</span>
-      </header>
+    const [bookingsList, setBookingsList] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+    const [cancellingId, setCancellingId] = useState(null);
+    const [confirmModal, setConfirmModal] = useState(null);
+    const [actionFeedback, setActionFeedback] = useState(null);
+    const [userRole, setUserRole] = useState("student");
 
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-8">
-        {/* Tabs */}
-        <div className="flex gap-1 bg-white rounded-xl p-1 border border-slate-100 shadow-sm mb-6">
-          {["Upcoming", "Pending", "Completed", "Cancelled"].map(t => (<button key={t} className={`flex-1 px-3 py-2 rounded-lg text-sm font-semibold transition-all ${tab === t ? "bg-indigo-600 text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`} onClick={() => setTab(t)}>
-              {t}
-              <span className={`ml-1.5 text-xs px-1.5 py-0.5 rounded-full ${tab === t ? "bg-white/20" : "bg-slate-100"}`}>
-                {bookings[t].length}
-              </span>
-            </button>))}
+    const loadBookings = async () => {
+        try {
+            setLoading(true);
+            setError(null);
+
+            const {
+                data: { session },
+                error: sessionError
+            } = await supabase.auth.getSession();
+
+            if (sessionError || !session?.access_token) {
+                setError("Please log in to view your bookings.");
+                setLoading(false);
+                return;
+            }
+
+            // Detect user role for smart back navigation
+            try {
+                const { data: userData } = await supabase
+                    .from("users")
+                    .select("role")
+                    .eq("id", session.user.id)
+                    .maybeSingle();
+                if (userData?.role) {
+                    setUserRole(userData.role);
+                }
+            } catch (roleErr) {
+                console.warn("Could not determine user role:", roleErr);
+            }
+
+            const response = await fetch("http://localhost:5000/bookings", {
+                headers: {
+                    Authorization: `Bearer ${session.access_token}`
+                }
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.error || "Failed to load bookings");
+            }
+
+            setBookingsList(data.bookings || []);
+        } catch (err) {
+            console.error("Failed to load bookings:", err);
+            setError(err.message || "Failed to load bookings");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        loadBookings();
+    }, []);
+
+    const promptCancel = (booking) => {
+        setActionFeedback(null);
+        setConfirmModal({
+            id: booking.id,
+            topic: booking.topic || "Session",
+            mentorName: booking.mentor_name || "Mentor"
+        });
+    };
+
+    const confirmCancelBooking = async () => {
+        if (!confirmModal) return;
+        const bookingId = confirmModal.id;
+
+        try {
+            setCancellingId(bookingId);
+
+            const {
+                data: { session }
+            } = await supabase.auth.getSession();
+
+            const token = session?.access_token;
+            if (!token) {
+                setActionFeedback({
+                    type: "error",
+                    message: "Session expired. Please log in again."
+                });
+                return;
+            }
+
+            const response = await fetch(`http://localhost:5000/bookings/${bookingId}`, {
+                method: "PATCH",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    status: "cancelled"
+                })
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.error || "Failed to cancel booking");
+            }
+
+            setConfirmModal(null);
+            setActionFeedback({
+                type: "success",
+                message: "Booking cancelled successfully."
+            });
+            await loadBookings();
+        } catch (err) {
+            console.error("Cancel booking error:", err);
+            setActionFeedback({
+                type: "error",
+                message: err.message || "Could not cancel booking."
+            });
+        } finally {
+            setCancellingId(null);
+        }
+    };
+
+    const categories = {
+        Upcoming: bookingsList.filter((b) => b.status === "confirmed"),
+        Pending: bookingsList.filter((b) => b.status === "pending"),
+        Completed: bookingsList.filter((b) => b.status === "completed"),
+        Cancelled: bookingsList.filter(
+            (b) => b.status === "cancelled" || b.status === "declined"
+        )
+    };
+
+    const getStatusBadge = (status) => {
+        switch (status) {
+            case "confirmed":
+                return { label: "Confirmed", color: "bg-emerald-50 text-emerald-700 border border-emerald-200/60" };
+            case "pending":
+                return { label: "Pending Acceptance", color: "bg-amber-50 text-amber-700 border border-amber-200/60" };
+            case "completed":
+                return { label: "Completed", color: "bg-[#EEF0FF] text-[#4F46E5] border border-[#EEF0FF]" };
+            case "declined":
+                return { label: "Declined", color: "bg-rose-50 text-rose-700 border border-rose-200/60" };
+            case "cancelled":
+                return { label: "Cancelled", color: "bg-slate-100 text-[#718096] border border-[#E5E7EB]" };
+            default:
+                return { label: status, color: "bg-[#F5F7FC] text-[#718096] border border-[#E5E7EB]" };
+        }
+    };
+
+    const currentBookings = categories[tab] || [];
+
+    const handleBackNav = () => {
+        if (userRole === "mentor") {
+            onNavigate("mentorDashboard");
+        } else if (userRole === "admin") {
+            onNavigate("adminDashboard");
+        } else {
+            onNavigate("menteeDashboard");
+        }
+    };
+
+    return (
+        <div className="min-h-screen bg-[#F5F7FC]">
+            <header className="bg-white border-b border-[#E5E7EB] px-6 py-4 flex items-center justify-between sticky top-0 z-40 shadow-xs">
+                <div className="flex items-center gap-4">
+                    <button
+                        className="flex items-center gap-2 text-sm font-semibold text-[#172033] hover:text-[#4F46E5] transition-colors bg-[#F5F7FC] px-3 py-1.5 rounded-xl border border-[#E5E7EB]"
+                        onClick={handleBackNav}
+                    >
+                        <span>←</span>
+                        <span>{userRole === "mentor" ? "Mentor Dashboard" : "Dashboard"}</span>
+                    </button>
+                    <div className="h-5 w-px bg-[#E5E7EB]" />
+                    <span className="font-bold text-[#172033]">My Bookings</span>
+                </div>
+            </header>
+            <div className="max-w-3xl mx-auto px-4 sm:px-6 py-8">
+                {/* Action Feedback Banner */}
+                {actionFeedback && (
+                    <div
+                        className={`mb-6 p-4 rounded-xl text-sm font-medium border flex items-center justify-between transition-all ${
+                            actionFeedback.type === "success"
+                                ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                                : "bg-rose-50 text-rose-800 border-rose-200"
+                        }`}
+                    >
+                        <div className="flex items-center gap-3">
+                            <span className="text-lg">{actionFeedback.type === "success" ? "✓" : "⚠️"}</span>
+                            <span>{actionFeedback.message}</span>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => setActionFeedback(null)}
+                            className="text-xs font-bold hover:opacity-75 cursor-pointer ml-4"
+                        >
+                            ✕
+                        </button>
+                    </div>
+                )}
+
+                {/* Tabs */}
+                <div className="flex gap-1 bg-white rounded-xl p-1 border border-[#E5E7EB] shadow-xs mb-6">
+                    {["Upcoming", "Pending", "Completed", "Cancelled"].map((t) => (
+                        <button
+                            key={t}
+                            className={`flex-1 px-3 py-2 rounded-lg text-sm font-semibold transition-all ${
+                                tab === t
+                                    ? "bg-[#4F46E5] text-white shadow-xs"
+                                    : "text-[#718096] hover:bg-[#F5F7FC] hover:text-[#172033]"
+                            }`}
+                            onClick={() => setTab(t)}
+                        >
+                            {t}
+                            <span
+                                className={`ml-1.5 text-xs px-1.5 py-0.5 rounded-full ${
+                                    tab === t ? "bg-white/20" : "bg-[#F5F7FC] text-[#718096]"
+                                }`}
+                            >
+                                {categories[t].length}
+                            </span>
+                        </button>
+                    ))}
+                </div>
+
+                {loading ? (
+                    /* Loading Skeleton */
+                    <div className="space-y-4">
+                        {[1, 2, 3].map((i) => (
+                            <div
+                                key={i}
+                                className="bg-white rounded-2xl p-5 border border-[#E5E7EB] shadow-xs animate-pulse"
+                            >
+                                <div className="flex items-start gap-4">
+                                    <div className="w-12 h-12 bg-slate-200 rounded-full flex-shrink-0" />
+                                    <div className="flex-1 space-y-3">
+                                        <div className="flex justify-between items-center">
+                                            <div className="h-5 bg-slate-200 rounded w-1/3" />
+                                            <div className="h-5 bg-slate-100 rounded-full w-20" />
+                                        </div>
+                                        <div className="h-4 bg-slate-100 rounded w-1/2" />
+                                        <div className="h-4 bg-slate-100 rounded w-1/4" />
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                ) : error ? (
+                    <div className="bg-white rounded-2xl p-8 border border-rose-100 shadow-xs text-center">
+                        <p className="text-rose-600 text-sm mb-4">{error}</p>
+                        <button
+                            className="bg-[#4F46E5] hover:bg-[#4338CA] text-white font-semibold px-5 py-2 rounded-xl text-sm transition-colors shadow-xs"
+                            onClick={loadBookings}
+                        >
+                            Retry
+                        </button>
+                    </div>
+                ) : currentBookings.length === 0 ? (
+                    <div className="bg-white rounded-2xl p-12 border border-[#E5E7EB] shadow-xs text-center">
+                        <div className="text-5xl mb-4">📭</div>
+                        <h3 className="font-bold text-[#172033] text-lg mb-2">No {tab} Bookings</h3>
+                        <p className="text-[#718096] text-sm mb-5">
+                            You don&apos;t have any {tab.toLowerCase()} bookings yet.
+                        </p>
+                        <button
+                            className="bg-[#4F46E5] hover:bg-[#4338CA] text-white font-semibold px-6 py-2.5 rounded-xl transition-colors shadow-xs"
+                            onClick={() => onNavigate("search")}
+                        >
+                            Find a Mentor
+                        </button>
+                    </div>
+                ) : (
+                    <div className="space-y-4">
+                        {currentBookings.map((b) => {
+                            const badge = getStatusBadge(b.status);
+                            const mentorName = b.mentor_name || "Mentor";
+                            const avatar = getInitials(mentorName);
+
+                            return (
+                                <div
+                                    key={b.id}
+                                    className="bg-white rounded-2xl p-5 border border-[#E5E7EB] shadow-xs hover:border-[#4F46E5]/40 transition-all"
+                                >
+                                    <div className="flex items-start gap-4">
+                                        <div className="w-12 h-12 bg-[#4F46E5] rounded-full flex items-center justify-center text-white font-bold flex-shrink-0">
+                                            {avatar}
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-start justify-between gap-2 flex-wrap">
+                                                <div>
+                                                    <h3 className="font-bold text-[#172033]">{mentorName}</h3>
+                                                    <p className="text-[#4F46E5] text-sm font-medium mt-0.5">
+                                                        📌 {b.topic}
+                                                    </p>
+                                                </div>
+                                                <span
+                                                    className={`text-xs font-semibold px-2.5 py-1 rounded-full ${badge.color}`}
+                                                >
+                                                    {badge.label}
+                                                </span>
+                                            </div>
+                                            <div className="flex flex-wrap gap-4 mt-3 text-sm text-[#718096]">
+                                                <span>📅 {b.date}</span>
+                                                <span>🕐 {formatTimeDisplay(b.time)}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="flex gap-2 mt-4 flex-wrap">
+                                        {(tab === "Upcoming" || tab === "Pending") && (
+                                            <button
+                                                className="text-xs font-semibold bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200/60 px-3 py-1.5 rounded-xl transition-colors cursor-pointer"
+                                                onClick={() => promptCancel(b)}
+                                            >
+                                                Cancel Session
+                                            </button>
+                                        )}
+                                        {tab === "Completed" && (
+                                            <button className="text-xs font-semibold bg-[#EEF0FF] hover:bg-[#4F46E5] hover:text-white text-[#4F46E5] border border-[#EEF0FF] px-3 py-1.5 rounded-xl transition-colors">
+                                                ★ Give Feedback
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
+            </div>
+
+            {/* In-app Cancellation Confirmation Modal */}
+            {confirmModal && (
+                <div className="fixed inset-0 bg-[#172033]/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-[#E5E7EB]">
+                        <div className="w-12 h-12 bg-rose-50 text-rose-600 rounded-xl flex items-center justify-center text-xl mb-4 font-bold border border-rose-100">
+                            ⚠️
+                        </div>
+                        <h3 className="text-lg font-bold text-[#172033] mb-1">Cancel Session?</h3>
+                        <p className="text-sm text-[#718096] mb-6">
+                            Are you sure you want to cancel your session with <strong className="text-[#172033]">{confirmModal.mentorName}</strong> on <strong className="text-[#172033]">{confirmModal.topic}</strong>?
+                        </p>
+                        <div className="flex items-center justify-end gap-3">
+                            <button
+                                type="button"
+                                disabled={cancellingId !== null}
+                                onClick={() => setConfirmModal(null)}
+                                className="px-4 py-2 text-sm font-semibold text-[#172033] bg-[#F5F7FC] hover:bg-slate-200 rounded-xl transition-colors cursor-pointer border border-[#E5E7EB]"
+                            >
+                                Keep Session
+                            </button>
+                            <button
+                                type="button"
+                                disabled={cancellingId !== null}
+                                onClick={confirmCancelBooking}
+                                className="px-4 py-2 text-sm font-semibold bg-rose-600 hover:bg-rose-700 text-white rounded-xl shadow-xs transition-colors flex items-center gap-2 cursor-pointer disabled:opacity-75"
+                            >
+                                {cancellingId ? (
+                                    <>
+                                        <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+                                        <span>Cancelling...</span>
+                                    </>
+                                ) : (
+                                    <span>Yes, Cancel</span>
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
-
-        {bookings[tab].length === 0 ? (<div className="bg-white rounded-2xl p-12 border border-slate-100 shadow-sm text-center">
-            <div className="text-5xl mb-4">📭</div>
-            <h3 className="font-bold text-slate-700 text-lg mb-2">No {tab} Bookings</h3>
-            <p className="text-slate-400 text-sm mb-5">You don&apos;t have any {tab.toLowerCase()} bookings yet.</p>
-            <button className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-6 py-2.5 rounded-xl transition-colors" onClick={() => onNavigate("search")}>
-              Find a Mentor
-            </button>
-          </div>) : (<div className="space-y-4">
-            {bookings[tab].map((b, i) => (<div key={i} className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm hover:shadow-md transition-all">
-                <div className="flex items-start gap-4">
-                  <div className={`w-12 h-12 ${b.bg} rounded-full flex items-center justify-center text-white font-bold flex-shrink-0`}>{b.avatar}</div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between gap-2 flex-wrap">
-                      <div>
-                        <h3 className="font-bold text-slate-800">{b.mentor}</h3>
-                        <p className="text-indigo-600 text-sm font-medium">📌 {b.topic}</p>
-                      </div>
-                      <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${b.statusColor}`}>{b.status}</span>
-                    </div>
-                    <div className="flex flex-wrap gap-4 mt-2 text-sm text-slate-500">
-                      <span>📅 {b.date}</span>
-                      <span>🕐 {b.time}</span>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex gap-2 mt-4 flex-wrap">
-                  <button className="text-xs font-semibold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-3 py-1.5 rounded-lg transition-colors">
-                    View Details
-                  </button>
-                  {tab === "Upcoming" && (<>
-                      <button className="text-xs font-semibold bg-emerald-50 hover:bg-emerald-100 text-emerald-700 px-3 py-1.5 rounded-lg transition-colors">
-                        Join Session
-                      </button>
-                      <button className="text-xs font-semibold bg-amber-50 hover:bg-amber-100 text-amber-700 px-3 py-1.5 rounded-lg transition-colors">
-                        Reschedule
-                      </button>
-                      <button className="text-xs font-semibold bg-red-50 hover:bg-red-100 text-red-600 px-3 py-1.5 rounded-lg transition-colors">
-                        Cancel
-                      </button>
-                    </>)}
-                  {tab === "Completed" && (<button className="text-xs font-semibold bg-yellow-50 hover:bg-yellow-100 text-yellow-700 px-3 py-1.5 rounded-lg transition-colors">
-                      ★ Give Feedback
-                    </button>)}
-                </div>
-              </div>))}
-          </div>)}
-      </div>
-    </div>);
+    );
 }

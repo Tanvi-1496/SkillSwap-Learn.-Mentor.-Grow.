@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 const skills = [
     { name: "Python", icon: "🐍", color: "bg-blue-100 text-blue-700" },
     { name: "Java", icon: "☕", color: "bg-orange-100 text-orange-700" },
@@ -67,32 +69,99 @@ const steps = [
     { num: "04", title: "Book & Learn", desc: "Schedule sessions with your mentor and start your personalized learning journey.", icon: "📅" },
 ];
 export default function Landing({ onNavigate }) {
-    return (<div className="min-h-screen bg-[#f8f9ff] font-[Plus_Jakarta_Sans,system-ui,sans-serif]">
+    const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+    const handleNavLink = (item) => {
+        setMobileMenuOpen(false);
+        if (item === "Find Mentors") {
+            onNavigate("search");
+        } else if (item === "Become a Mentor") {
+            onNavigate("register");
+        } else if (item === "How It Works") {
+            document.getElementById("how-it-works")?.scrollIntoView({ behavior: "smooth" });
+        } else if (item === "Home") {
+            window.scrollTo({ top: 0, behavior: "smooth" });
+        } else if (item === "About") {
+            document.getElementById("ecosystem")?.scrollIntoView({ behavior: "smooth" });
+        }
+    };
+
+    return (<div className="min-h-screen bg-[#F5F7FC] font-[Plus_Jakarta_Sans,system-ui,sans-serif]">
       {/* Navbar */}
-      <nav className="bg-white border-b border-slate-100 sticky top-0 z-50 shadow-sm">
+      <nav className="bg-white border-b border-[#E5E7EB] sticky top-0 z-50 shadow-xs">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center">
+            <div className="flex items-center gap-2 cursor-pointer" onClick={() => handleNavLink("Home")}>
+              <div className="w-8 h-8 bg-[#4F46E5] rounded-xl flex items-center justify-center">
                 <span className="text-white font-bold text-sm">S</span>
               </div>
-              <span className="text-xl font-bold text-slate-900">SkillSwap</span>
+              <span className="text-xl font-bold text-[#172033]">SkillSwap</span>
             </div>
             <div className="hidden md:flex items-center gap-8">
-              {["Home", "Find Mentors", "How It Works", "Become a Mentor", "About"].map(item => (<button key={item} className="text-sm font-medium text-slate-600 hover:text-indigo-600 transition-colors" onClick={() => item === "Find Mentors" && onNavigate("search")}>
+              {["Home", "Find Mentors", "How It Works", "Become a Mentor", "About"].map(item => (
+                <button
+                  key={item}
+                  className="text-sm font-medium text-[#172033]/80 hover:text-[#4F46E5] transition-colors cursor-pointer"
+                  onClick={() => handleNavLink(item)}
+                >
                   {item}
-                </button>))}
+                </button>
+              ))}
             </div>
-            <div className="flex items-center gap-3">
-              <button className="text-sm font-semibold text-slate-700 hover:text-indigo-600 px-4 py-2 rounded-lg transition-colors" onClick={() => onNavigate("login")}>
+            <div className="hidden md:flex items-center gap-3">
+              <button className="text-sm font-semibold text-[#172033] hover:text-[#4F46E5] px-4 py-2 rounded-xl transition-colors cursor-pointer" onClick={() => onNavigate("login")}>
                 Login
               </button>
-              <button className="text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-lg transition-colors" onClick={() => onNavigate("register")}>
+              <button className="text-sm font-semibold text-white bg-[#4F46E5] hover:bg-[#4338CA] px-4 py-2 rounded-xl transition-colors shadow-xs cursor-pointer" onClick={() => onNavigate("register")}>
+                Get Started
+              </button>
+            </div>
+            <button
+              type="button"
+              className="md:hidden p-2 rounded-xl text-[#172033] hover:text-[#4F46E5] hover:bg-[#F5F7FC] transition-colors cursor-pointer"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              aria-label="Toggle navigation menu"
+            >
+              <div className="w-5 h-4 flex flex-col justify-between">
+                <span className={`h-0.5 w-full bg-[#172033] rounded-sm transition-transform ${mobileMenuOpen ? "rotate-45 translate-y-1.5" : ""}`} />
+                <span className={`h-0.5 w-full bg-[#172033] rounded-sm transition-opacity ${mobileMenuOpen ? "opacity-0" : ""}`} />
+                <span className={`h-0.5 w-full bg-[#172033] rounded-sm transition-transform ${mobileMenuOpen ? "-rotate-45 -translate-y-1.5" : ""}`} />
+              </div>
+            </button>
+          </div>
+        </div>
+
+        {/* Mobile dropdown */}
+        {mobileMenuOpen && (
+          <div className="md:hidden border-t border-slate-100 bg-white px-4 pt-3 pb-5 space-y-2 shadow-lg">
+            {["Home", "Find Mentors", "How It Works", "Become a Mentor", "About"].map((item) => (
+              <button
+                key={item}
+                type="button"
+                className="w-full text-left py-2 px-3 text-sm font-semibold text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 rounded-xl transition-colors"
+                onClick={() => handleNavLink(item)}
+              >
+                {item}
+              </button>
+            ))}
+            <div className="pt-3 border-t border-slate-100 flex gap-2">
+              <button
+                type="button"
+                className="flex-1 py-2.5 text-center text-sm font-semibold text-slate-700 border border-slate-200 rounded-xl hover:bg-slate-50 cursor-pointer"
+                onClick={() => { setMobileMenuOpen(false); onNavigate("login"); }}
+              >
+                Login
+              </button>
+              <button
+                type="button"
+                className="flex-1 py-2.5 text-center text-sm font-semibold text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 shadow-xs cursor-pointer"
+                onClick={() => { setMobileMenuOpen(false); onNavigate("register"); }}
+              >
                 Get Started
               </button>
             </div>
           </div>
-        </div>
+        )}
       </nav>
 
       {/* Hero */}
@@ -191,7 +260,7 @@ export default function Landing({ onNavigate }) {
       </section>
 
       {/* How It Works */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
+      <section id="how-it-works" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
         <div className="text-center mb-14">
           <div className="text-indigo-600 text-sm font-semibold uppercase tracking-wider mb-2">Simple Process</div>
           <h2 className="text-3xl lg:text-4xl font-bold text-slate-900">How SkillSwap Works</h2>
@@ -266,7 +335,7 @@ export default function Landing({ onNavigate }) {
       </section>
 
       {/* Benefits */}
-      <section className="bg-white">
+      <section id="ecosystem" className="bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
           <div className="text-center mb-14">
             <h2 className="text-3xl font-bold text-slate-900">Built for Every Role in the Ecosystem</h2>
@@ -345,10 +414,22 @@ export default function Landing({ onNavigate }) {
             <div className="flex flex-wrap gap-x-12 gap-y-4">
               {["About", "Contact", "Privacy", "Terms", "Help"].map(link => (<a key={link} href="#" className="text-sm hover:text-white transition-colors">{link}</a>))}
             </div>
-            <div className="flex items-center gap-3">
-              {["𝕏", "in", "📘", "▶"].map(icon => (<button key={icon} className="w-9 h-9 bg-slate-800 hover:bg-indigo-600 rounded-full flex items-center justify-center text-sm transition-colors">
-                  {icon}
-                </button>))}
+            <div className="flex items-center gap-2.5">
+              {[
+                { name: "X (Twitter)", label: "𝕏" },
+                { name: "LinkedIn", label: "in" },
+                { name: "Community", label: "💬" },
+                { name: "YouTube", label: "▶" }
+              ].map(s => (
+                <span
+                  key={s.name}
+                  aria-label={s.name}
+                  title={s.name}
+                  className="w-8 h-8 bg-slate-800 text-slate-300 rounded-xl flex items-center justify-center text-xs font-bold border border-slate-700/60 shadow-xs select-none"
+                >
+                  {s.label}
+                </span>
+              ))}
             </div>
           </div>
           <div className="border-t border-slate-800 mt-8 pt-6 text-center text-xs">

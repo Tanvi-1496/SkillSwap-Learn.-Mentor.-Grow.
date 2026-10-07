@@ -73,7 +73,7 @@ export default function AIChat({ onClose, onNavigate, fullPage }) {
     };
     const container = fullPage
         ? "flex flex-col h-full"
-        : "fixed bottom-6 right-6 w-96 h-[560px] bg-white rounded-3xl shadow-2xl border border-slate-200 flex flex-col z-50 overflow-hidden";
+        : "fixed bottom-16 sm:bottom-6 right-3 sm:right-6 w-[calc(100vw-1.5rem)] max-w-sm sm:w-96 h-[520px] max-h-[78vh] bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col z-[1000] overflow-hidden";
     return (<div className={container}>
       {/* Header */}
       <div className="bg-gradient-to-r from-indigo-600 to-violet-600 px-5 py-4 flex items-center gap-3 flex-shrink-0">
