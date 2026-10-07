@@ -14,7 +14,12 @@ import Profile from "./components/Profile";
 import MenteeRequirements from "./components/MenteeRequirements";
 export default function App() {
     const [page, setPage] = useState("landing");
-    const nav = (p) => setPage(p);
+    const [pageData, setPageData] = useState({});
+
+    const nav = (p, data = {}) => {
+        setPageData(data);
+        setPage(p);
+    };
     return (<div className="h-full font-[Plus_Jakarta_Sans,system-ui,sans-serif]">
       {/* Demo Nav Bar */}
       <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[9999] flex flex-wrap justify-center gap-1.5 bg-slate-900/95 backdrop-blur-sm rounded-2xl px-4 py-2.5 shadow-2xl border border-slate-700 max-w-[95vw]">
@@ -40,8 +45,18 @@ export default function App() {
       {page === "register" && <Auth mode="register" onNavigate={nav}/>}
       {page === "menteeDashboard" && <MenteeDashboard onNavigate={nav}/>}
       {page === "aiRecs" && <AIRecommendations onNavigate={nav}/>}
-      {page === "mentorProfile" && <MentorProfile onNavigate={nav}/>}
-      {page === "booking" && <BookingFlow onNavigate={nav}/>}
+      {page === "mentorProfile" && (
+            <MentorProfile
+                onNavigate={nav}
+                mentorId={pageData.mentorId}
+            />
+        )}
+      {page === "booking" && (
+          <BookingFlow
+              onNavigate={nav}
+              mentorId={pageData.mentorId}
+          />
+      )}
       {page === "bookings" && <MyBookings onNavigate={nav}/>}
       {page === "search" && <SearchMentors onNavigate={nav}/>}
       {page === "profile" && <Profile onNavigate={nav}/>}

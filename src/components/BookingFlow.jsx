@@ -1,47 +1,59 @@
-import { useState } from "react";
-const dates = [
-    { day: "Mon", date: "Aug 25", slots: 3 },
-    { day: "Tue", date: "Aug 26", slots: 0 },
-    { day: "Wed", date: "Aug 27", slots: 2 },
-    { day: "Thu", date: "Aug 28", slots: 0 },
-    { day: "Fri", date: "Aug 29", slots: 2 },
-    { day: "Sat", date: "Aug 30", slots: 5 },
-    { day: "Sun", date: "Aug 31", slots: 0 },
-];
-const timeSlots = {
-    "Aug 25": ["5:00 PM", "6:00 PM", "7:00 PM"],
-    "Aug 27": ["4:00 PM", "5:00 PM"],
-    "Aug 29": ["5:00 PM", "6:00 PM"],
-    "Aug 30": ["10:00 AM", "11:00 AM", "12:00 PM", "5:00 PM", "6:00 PM"],
-};
-const topics = [
-    "Introduction & Goal Setting",
-    "Python for Data Science",
-    "Machine Learning Fundamentals",
-    "Project Review & Feedback",
-    "Interview Preparation",
-    "Research Guidance",
-    "Career Advice",
-    "Other",
-];
-export default function BookingFlow({ onNavigate }) {
+
+import { useEffect, useState } from "react";
+import { supabase } from "../lib/supabase";
+
+export default function BookingFlow({ onNavigate, mentorId }) {
+    const [mentor, setMentor] = useState(null);
     const [step, setStep] = useState(1);
     const [selectedDate, setSelectedDate] = useState("");
     const [selectedTime, setSelectedTime] = useState("");
     const [selectedTopic, setSelectedTopic] = useState("");
     const [requirements, setRequirements] = useState("");
     const [confirmed, setConfirmed] = useState(false);
+
+    useEffect(() => {
+        if (!mentorId) return;
+
+        fetch(`http://localhost:5000/mentors/${mentorId}`)
+            .then((res) => res.json())
+            .then((data) => {
+                console.log("BOOKING MENTOR:", data);
+                setMentor(data.mentor);
+            })
+            .catch((error) => {
+                console.error("Booking mentor fetch error:", error);
+            });
+    }, [mentorId]);
+
+    const availability = mentor?.availability || [];
+    const availableDays = availability.filter(
+        (item) => item.slots && item.slots.length > 0
+    );
+
+    const topics = mentor?.skills?.length
+        ? [
+              ...mentor.skills.map((skill) => `${skill} Guidance`),
+              "Project Review & Feedback",
+              "Interview Preparation",
+              "Career Advice",
+              "Other",
+          ]
+        : [
+              "Introduction & Goal Setting",
+              "Project Review & Feedback",
+              "Interview Preparation",
+              "Career Advice",
+              "Other",
+          ];
+
     const canNext = () => {
-        if (step === 1)
-            return !!selectedDate;
-        if (step === 2)
-            return !!selectedTime;
-        if (step === 3)
-            return !!selectedTopic;
-        if (step === 4)
-            return requirements.length > 10;
+        if (step === 1) return !!selectedDate;
+        if (step === 2) return !!selectedTime;
+        if (step === 3) return !!selectedTopic;
+        if (step === 4) return requirements.length > 10;
         return true;
     };
+
     const steps = [
         { num: 1, label: "Choose Date" },
         { num: 2, label: "Choose Time" },
@@ -49,134 +61,329 @@ export default function BookingFlow({ onNavigate }) {
         { num: 4, label: "Requirements" },
         { num: 5, label: "Confirm" },
     ];
-    if (confirmed) {
-        return (<div className="min-h-screen bg-[#f8f9ff] flex items-center justify-center p-6">
-        <div className="bg-white rounded-3xl p-10 shadow-xl border border-slate-100 max-w-md w-full text-center">
-          <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center text-4xl mx-auto mb-5">🎉</div>
-          <h1 className="text-2xl font-bold text-slate-900 mb-2">Booking Confirmed!</h1>
-          <p className="text-slate-500 mb-6">Your session has been scheduled. Dr. Priya will receive a notification shortly.</p>
-          <div className="bg-slate-50 rounded-2xl p-5 text-left space-y-3 mb-6">
-            {[
-                { label: "Mentor", val: "Dr. Priya Sharma" },
-                { label: "Date", val: selectedDate },
-                { label: "Time", val: selectedTime },
-                { label: "Topic", val: selectedTopic },
-                { label: "Duration", val: "60 minutes" },
-                { label: "Mode", val: "Online (Zoom link will be shared)" },
-            ].map(r => (<div key={r.label} className="flex items-center justify-between">
-                <span className="text-slate-500 text-sm">{r.label}</span>
-                <span className="font-semibold text-slate-800 text-sm">{r.val}</span>
-              </div>))}
-          </div>
-          <div className="flex gap-3">
-            <button className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 rounded-xl transition-colors" onClick={() => onNavigate("bookings")}>
-              View Booking
-            </button>
-            <button className="flex-1 border border-slate-200 hover:border-slate-300 text-slate-700 font-semibold py-3 rounded-xl transition-colors">
-              Add to Calendar
-            </button>
-          </div>
-        </div>
-      </div>);
+
+    const handleNext = () => {
+        if (step < steps.length) setStep(step + 1);
+    };
+
+    const handleBack = () => {
+        if (step > 1) setStep(step - 1);
+    };
+
+   const getNextDateForDay = (dayName) => {
+    const days = [
+        "Sunday",
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+        "Friday",
+        "Saturday",
+    ];
+
+    const today = new Date();
+    const targetDay = days.indexOf(dayName);
+    const currentDay = today.getDay();
+
+    let diff = targetDay - currentDay;
+
+    if (diff <= 0) {
+        diff += 7;
     }
-    return (<div className="min-h-screen bg-[#f8f9ff]">
-      <header className="bg-white border-b border-slate-100 px-6 py-4 flex items-center gap-4 sticky top-0 z-40 shadow-sm">
-        <button className="flex items-center gap-2 text-slate-500 hover:text-indigo-600 transition-colors" onClick={() => onNavigate("mentorProfile")}>
-          ← Mentor Profile
-        </button>
-        <div className="h-5 w-px bg-slate-200"/>
-        <span className="font-semibold text-slate-800">Book a Session with Dr. Priya Sharma</span>
-      </header>
 
-      <div className="max-w-2xl mx-auto px-4 sm:px-6 py-8">
-        {/* Step Indicator */}
-        <div className="flex items-center justify-between mb-8">
-          {steps.map((s, i) => (<div key={s.num} className="flex items-center flex-1">
-              <div className="flex flex-col items-center">
-                <div className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm transition-all ${step > s.num ? "bg-emerald-500 text-white" : step === s.num ? "bg-indigo-600 text-white shadow-md" : "bg-slate-200 text-slate-500"}`}>
-                  {step > s.num ? "✓" : s.num}
-                </div>
-                <span className={`text-xs mt-1 font-medium hidden sm:block ${step === s.num ? "text-indigo-600" : "text-slate-400"}`}>{s.label}</span>
-              </div>
-              {i < steps.length - 1 && (<div className={`flex-1 h-0.5 mx-2 rounded-full transition-all ${step > s.num ? "bg-emerald-400" : "bg-slate-200"}`}/>)}
-            </div>))}
-        </div>
+    const result = new Date(today);
+    result.setDate(today.getDate() + diff);
 
-        <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm">
-          {step === 1 && (<>
-              <h2 className="text-lg font-bold text-slate-800 mb-5">📅 Choose a Date</h2>
-              <div className="grid grid-cols-7 gap-2">
-                {dates.map(d => (<button key={d.date} disabled={d.slots === 0} className={`p-3 rounded-xl text-center transition-all ${d.slots === 0 ? "opacity-40 cursor-not-allowed bg-slate-50" : selectedDate === d.date ? "bg-indigo-600 text-white shadow-sm" : "bg-slate-50 hover:bg-indigo-50 hover:border-indigo-200 border border-slate-200"}`} onClick={() => { setSelectedDate(d.date); setSelectedTime(""); }}>
-                    <div className={`text-xs font-semibold mb-1 ${selectedDate === d.date ? "text-indigo-200" : "text-slate-500"}`}>{d.day}</div>
-                    <div className={`text-sm font-bold ${selectedDate === d.date ? "text-white" : "text-slate-700"}`}>{d.date.split(" ")[1]}</div>
-                    {d.slots > 0 && (<div className={`text-xs mt-1 ${selectedDate === d.date ? "text-indigo-200" : "text-indigo-600"}`}>{d.slots} slots</div>)}
-                  </button>))}
-              </div>
-            </>)}
+    return result.toISOString().split("T")[0];
+};
 
-          {step === 2 && (<>
-              <h2 className="text-lg font-bold text-slate-800 mb-2">🕐 Choose a Time Slot</h2>
-              <p className="text-slate-500 text-sm mb-5">{selectedDate} — Available times</p>
-              <div className="grid grid-cols-3 gap-3">
-                {(timeSlots[selectedDate] || []).map(slot => (<button key={slot} className={`py-3 px-4 rounded-xl border text-sm font-semibold transition-all ${selectedTime === slot ? "bg-indigo-600 text-white border-indigo-600 shadow-sm" : "border-slate-200 text-slate-700 hover:border-indigo-300 hover:bg-indigo-50"}`} onClick={() => setSelectedTime(slot)}>
-                    {slot}
-                  </button>))}
-              </div>
-            </>)}
+const handleSubmit = async () => {
+    try {
+        const { data: { user }, error: userError } = await supabase.auth.getUser();
 
-          {step === 3 && (<>
-              <h2 className="text-lg font-bold text-slate-800 mb-5">📌 Select Session Topic</h2>
-              <div className="space-y-2">
-                {topics.map(t => (<button key={t} className={`w-full text-left px-4 py-3 rounded-xl border text-sm font-medium transition-all ${selectedTopic === t ? "bg-indigo-600 text-white border-indigo-600" : "border-slate-200 text-slate-700 hover:border-indigo-300 hover:bg-indigo-50"}`} onClick={() => setSelectedTopic(t)}>
-                    {selectedTopic === t ? "✓ " : ""}{t}
-                  </button>))}
-              </div>
-            </>)}
+            if (userError || !user) {
+                alert("Please login again before booking.");
+                return;
+            }
 
-          {step === 4 && (<>
-              <h2 className="text-lg font-bold text-slate-800 mb-2">✍️ Your Requirements</h2>
-              <p className="text-slate-500 text-sm mb-4">Help your mentor prepare by describing what you need help with.</p>
-              <textarea value={requirements} onChange={e => setRequirements(e.target.value)} placeholder="e.g., I'm a 3rd year CSE student working on a machine learning project for detecting plant diseases. I need help with choosing the right model architecture and evaluating its performance..." rows={6} className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 resize-none transition-all"/>
-              <div className="flex justify-between text-xs text-slate-400 mt-1">
-                <span>{requirements.length > 10 ? "✓ Looks good" : "Minimum 10 characters"}</span>
-                <span>{requirements.length} chars</span>
-              </div>
-            </>)}
+            const studentId = user.id;
 
-          {step === 5 && (<>
-              <h2 className="text-lg font-bold text-slate-800 mb-5">✅ Confirm Booking</h2>
-              <div className="space-y-3 mb-6">
-                {[
-                { label: "Mentor", val: "Dr. Priya Sharma", sub: "Faculty Mentor · IIT Bombay" },
-                { label: "Date", val: selectedDate },
-                { label: "Time", val: `${selectedTime} (60 min)` },
-                { label: "Topic", val: selectedTopic },
-                { label: "Mode", val: "Online (Video Call)" },
-            ].map(r => (<div key={r.label} className="flex items-start justify-between py-3 border-b border-slate-100 last:border-0">
-                    <span className="text-slate-500 text-sm">{r.label}</span>
-                    <div className="text-right">
-                      <div className="font-semibold text-slate-800 text-sm">{r.val}</div>
-                      {r.sub && <div className="text-xs text-slate-400">{r.sub}</div>}
+        
+        const bookingDate = getNextDateForDay(selectedDate);
+
+        const response = await fetch("http://localhost:5000/bookings", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                mentor_id: mentorId,
+                student_id: studentId,
+                topic: selectedTopic,
+                date: bookingDate,
+                time: selectedTime,
+                status: "pending",
+            }),
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.error || "Booking failed");
+        }
+
+        console.log("BOOKING CREATED:", data);
+
+        setConfirmed(true);
+
+    } catch (error) {
+        console.error("Booking error:", error);
+        alert(error.message || "Failed to create booking.");
+    }
+};
+
+    if (confirmed) {
+        return (
+            <div className="min-h-screen bg-[#f8f9ff] flex items-center justify-center p-6">
+                <div className="bg-white rounded-3xl p-10 shadow-xl border border-slate-100 max-w-md w-full text-center">
+                    <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center text-4xl mx-auto mb-5">
+                        🎉
                     </div>
-                  </div>))}
-              </div>
-              <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-3 mb-5 text-sm text-indigo-700">
-                <strong>Note:</strong> You can cancel or reschedule up to 24 hours before the session.
-              </div>
-            </>)}
+                    <h1 className="text-2xl font-bold text-slate-900 mb-2">Booking Confirmed!</h1>
+                    <p className="text-slate-500 mb-6">
+                        Your session has been scheduled. {mentor?.name || "Your mentor"} will receive a notification shortly.
+                    </p>
+                    <div className="bg-slate-50 rounded-2xl p-5 text-left space-y-3 mb-6">
+                        {[
+                            { label: "Mentor", val: mentor?.name || "Mentor" },
+                            { label: "Date", val: selectedDate },
+                            { label: "Time", val: selectedTime },
+                            { label: "Topic", val: selectedTopic },
+                            { label: "Duration", val: "60 minutes" },
+                            { label: "Mode", val: "Online (Zoom link will be shared)" },
+                        ].map((r) => (
+                            <div key={r.label} className="flex items-center justify-between">
+                                <span className="text-slate-500 text-sm">{r.label}</span>
+                                <span className="font-semibold text-slate-800 text-sm">{r.val}</span>
+                            </div>
+                        ))}
+                    </div>
+                    <div className="flex gap-3">
+                        <button
+                            className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 rounded-xl transition-colors"
+                            onClick={() => onNavigate("bookings")}
+                        >
+                            View Booking
+                        </button>
+                        <button className="flex-1 border border-slate-200 hover:border-slate-300 text-slate-700 font-semibold py-3 rounded-xl transition-colors">
+                            Add to Calendar
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
-          {/* Navigation */}
-          <div className="flex gap-3 mt-6">
-            {step > 1 && (<button className="flex-1 border border-slate-200 text-slate-700 font-semibold py-3 rounded-xl hover:bg-slate-50 transition-colors" onClick={() => setStep(s => s - 1)}>
-                ← Back
-              </button>)}
-            {step < 5 ? (<button className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm" disabled={!canNext()} onClick={() => setStep(s => s + 1)}>
-                Continue →
-              </button>) : (<button className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-3 rounded-xl transition-colors shadow-sm" onClick={() => setConfirmed(true)}>
-                Confirm Booking 🎉
-              </button>)}
-          </div>
+    return (
+        <div className="min-h-screen bg-[#f8f9ff] px-4 py-8">
+            <div className="max-w-4xl mx-auto">
+                <div className="bg-white rounded-3xl shadow-xl border border-slate-100 p-6 md:p-8">
+                    <div className="flex items-center justify-between mb-8">
+                        <div>
+                            <p className="text-sm font-medium text-indigo-600 uppercase tracking-wide">Booking flow</p>
+                            <h2 className="text-2xl font-bold text-slate-900">Book a session with {mentor?.name || "mentor"}</h2>
+                        </div>
+                        <button
+                            onClick={() => onNavigate("mentors")}
+                            className="text-slate-500 hover:text-slate-700 text-sm font-medium"
+                        >
+                            Cancel
+                        </button>
+                    </div>
+
+                    <div className="mb-8">
+                        <div className="flex items-center gap-3 overflow-x-auto pb-2">
+                            {steps.map((item) => (
+                                <div key={item.num} className="flex items-center min-w-0 flex-1">
+                                    <div
+                                        className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold ${
+                                            step === item.num
+                                                ? "bg-indigo-600 text-white"
+                                                : step > item.num
+                                                ? "bg-emerald-500 text-white"
+                                                : "bg-slate-100 text-slate-500"
+                                        }`}
+                                    >
+                                        {item.num}
+                                    </div>
+                                    <span
+                                        className={`ml-2 text-sm whitespace-nowrap ${
+                                            step >= item.num ? "text-slate-800 font-medium" : "text-slate-400"
+                                        }`}
+                                    >
+                                        {item.label}
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    {step === 1 && (
+                        <div className="space-y-6">
+                            <div>
+                                <h3 className="text-lg font-semibold text-slate-900 mb-4">Choose a date</h3>
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                                    {availableDays.length ? (
+                                        availableDays.map((day) => (
+                                            <button
+                                                key={day.day}
+                                                type="button"
+                                                onClick={() => setSelectedDate(day.day)}
+                                                className={`rounded-2xl border p-4 text-left transition ${
+                                                    selectedDate === day.day
+                                                        ? "border-indigo-500 bg-indigo-50 text-indigo-700"
+                                                        : "border-slate-200 hover:border-slate-300 text-slate-700"
+                                                }`}
+                                            >
+                                                <div className="font-semibold">{day.day}</div>
+                                                <div className="text-sm text-slate-500">{day.slots?.length || 0} slots available</div>
+                                            </button>
+                                        ))
+                                    ) : (
+                                        <div className="text-slate-500">No available dates yet.</div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {step === 2 && (
+                        <div className="space-y-6">
+                            <div>
+                                <h3 className="text-lg font-semibold text-slate-900 mb-4">Choose a time</h3>
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                    {availableDays
+                                        .filter((day) => day.day === selectedDate)
+                                        .flatMap((day) => day.slots || [])
+                                        .map((slot) => (
+                                            <button
+                                                key={slot}
+                                                type="button"
+                                                onClick={() => setSelectedTime(slot)}
+                                                className={`rounded-xl border px-4 py-3 text-sm font-medium transition ${
+                                                    selectedTime === slot
+                                                        ? "border-indigo-500 bg-indigo-50 text-indigo-700"
+                                                        : "border-slate-200 hover:border-slate-300 text-slate-700"
+                                                }`}
+                                            >
+                                                {slot}
+                                            </button>
+                                        ))}
+                                </div>
+                                {!availableDays.some((day) => day.day === selectedDate) && (
+                                    <p className="text-sm text-slate-500 mt-3">Please select a date first.</p>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
+                    {step === 3 && (
+                        <div className="space-y-6">
+                            <div>
+                                <h3 className="text-lg font-semibold text-slate-900 mb-4">Select a topic</h3>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                    {topics.map((topic) => (
+                                        <button
+                                            key={topic}
+                                            type="button"
+                                            onClick={() => setSelectedTopic(topic)}
+                                            className={`rounded-2xl border p-4 text-left transition ${
+                                                selectedTopic === topic
+                                                    ? "border-indigo-500 bg-indigo-50 text-indigo-700"
+                                                    : "border-slate-200 hover:border-slate-300 text-slate-700"
+                                            }`}
+                                        >
+                                            {topic}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {step === 4 && (
+                        <div className="space-y-6">
+                            <div>
+                                <h3 className="text-lg font-semibold text-slate-900 mb-4">Share requirements</h3>
+                                <textarea
+                                    value={requirements}
+                                    onChange={(e) => setRequirements(e.target.value)}
+                                    rows={5}
+                                    placeholder="Tell your mentor what you want help with, your goals, or anything they should know before the session..."
+                                    className="w-full rounded-2xl border border-slate-200 p-4 text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400"
+                                />
+                                <p className="text-sm text-slate-500 mt-2">Minimum 10 characters.</p>
+                            </div>
+                        </div>
+                    )}
+
+                    {step === 5 && (
+                        <div className="space-y-6">
+                            <div>
+                                <h3 className="text-lg font-semibold text-slate-900 mb-4">Review and confirm</h3>
+                                <div className="bg-slate-50 rounded-2xl p-5 space-y-3">
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-slate-500">Mentor</span>
+                                        <span className="font-semibold text-slate-800">{mentor?.name || "Mentor"}</span>
+                                    </div>
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-slate-500">Date</span>
+                                        <span className="font-semibold text-slate-800">{selectedDate}</span>
+                                    </div>
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-slate-500">Time</span>
+                                        <span className="font-semibold text-slate-800">{selectedTime}</span>
+                                    </div>
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-slate-500">Topic</span>
+                                        <span className="font-semibold text-slate-800">{selectedTopic}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="mt-8 flex justify-between gap-3">
+                        <button
+                            type="button"
+                            onClick={handleBack}
+                            disabled={step === 1}
+                            className="px-5 py-3 rounded-xl border border-slate-200 text-slate-700 font-medium disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                            Back
+                        </button>
+
+                        {step < steps.length ? (
+                            <button
+                                type="button"
+                                onClick={handleNext}
+                                disabled={!canNext()}
+                                className="px-5 py-3 rounded-xl bg-indigo-600 text-white font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                Next
+                            </button>
+                        ) : (
+                            <button
+                                type="button"
+                                onClick={handleSubmit}
+                                className="px-5 py-3 rounded-xl bg-indigo-600 text-white font-medium"
+                            >
+                                Confirm Booking
+                            </button>
+                        )}
+                    </div>
+                </div>
+            </div>
         </div>
-      </div>
-    </div>);
+    );
 }

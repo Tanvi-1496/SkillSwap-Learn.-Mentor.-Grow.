@@ -4,7 +4,8 @@ import cors from "cors";
 import dotenv from "dotenv";
 import profileRoutes from "./routes/profile.js";
 import mentorRoutes from "./routes/mentor.js";
-import recommendationRoutes from ".routes/recommendations.js";
+import recommendationRoutes from "./routes/recommendations.js";
+import bookingRoutes from "./routes/bookings.js";
 
 
 dotenv.config();
@@ -17,6 +18,7 @@ app.use("/auth", authRoutes);
 app.use("/profile", profileRoutes);
 app.use("/mentors", mentorRoutes);
 app.use("/recommendations", recommendationRoutes);
+app.use("/bookings", bookingRoutes);
 
 app.get("/", (req, res) => {
     res.json({

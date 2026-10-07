@@ -1,34 +1,33 @@
-// import { useState } from "react";
 import { useEffect, useState } from "react";
-const reviews = [
-    { name: "Aryan Shah", avatar: "AS", bg: "bg-indigo-500", rating: 5, text: "Dr. Sharma completely transformed my understanding of ML. Her structured approach and real-world project examples were invaluable.", date: "Aug 15, 2025" },
-    { name: "Preethi Rao", avatar: "PR", bg: "bg-pink-500", rating: 5, text: "Found my first data science internship after three sessions. Her interview prep guidance was spot on!", date: "Jul 28, 2025" },
-    { name: "Kiran Dev", avatar: "KD", bg: "bg-emerald-500", rating: 4, text: "Very knowledgeable mentor. Sometimes sessions run over time because there's so much to cover — which is actually a good thing.", date: "Jul 12, 2025" },
-];
-const availability = {
-    Mon: ["5:00 PM", "6:00 PM", "7:00 PM"],
-    Tue: [],
-    Wed: ["4:00 PM", "5:00 PM"],
-    Thu: [],
-    Fri: ["5:00 PM", "6:00 PM"],
-    Sat: ["10:00 AM", "11:00 AM", "12:00 PM"],
-    Sun: [],
-};
-export default function MentorProfile({ onNavigate }) {
+
+export default function MentorProfile({ onNavigate , mentorId  }) {
     const [activeTab, setActiveTab] = useState("about");
-    const [selectedDay, setSelectedDay] = useState("Mon");
+    const [selectedDay, setSelectedDay] = useState("Monday");
     const [mentor, setMentor] = useState(null);
 
-    useEffect(() => {
-          const mentorId = "aa2e17ae-e96e-41b4-96de-3e101511312e";
+     const availability = {
+        Monday: mentor?.availability?.find(a => a.day === "Monday")?.slots || [],
+        Tuesday: mentor?.availability?.find(a => a.day === "Tuesday")?.slots || [],
+        Wednesday: mentor?.availability?.find(a => a.day === "Wednesday")?.slots || [],
+        Thursday: mentor?.availability?.find(a => a.day === "Thursday")?.slots || [],
+        Friday: mentor?.availability?.find(a => a.day === "Friday")?.slots || [],
+        Saturday: mentor?.availability?.find(a => a.day === "Saturday")?.slots || [],
+        Sunday: mentor?.availability?.find(a => a.day === "Sunday")?.slots || [],
+    };
 
-          fetch(`http://localhost:5000/mentors/${mentorId}`)
-              .then(res => res.json())
-              .then(data => {
-                  console.log("MENTOR PROFILE:", data);
-                  setMentor(data.mentor);
-              });
-      }, []);
+    useEffect(() => {
+    if (!mentorId) return;
+
+        fetch(`http://localhost:5000/mentors/${mentorId}`)
+            .then(res => res.json())
+            .then(data => {
+                console.log("MENTOR PROFILE:", data);
+                setMentor(data.mentor);
+            })
+            .catch(error => {
+                console.error("Mentor profile fetch error:", error);
+            });
+    }, [mentorId]);
     return (<div className="min-h-screen bg-[#f8f9ff]">
       {/* Header Nav */}
       <header className="bg-white border-b border-slate-100 px-6 py-4 flex items-center gap-4 sticky top-0 z-40 shadow-sm">
@@ -122,11 +121,8 @@ export default function MentorProfile({ onNavigate }) {
 
         {activeTab === "about" && (<div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm">
             <h2 className="font-bold text-slate-800 text-lg mb-3">About</h2>
-            <p className="text-slate-600 leading-relaxed mb-4">
-              {mentor?.bio || "No bio available."}
-          </p>
-            <p className="text-slate-600 leading-relaxed">
-              She has mentored over 120 students through academic projects, research internships, and industry placements. Her students have been placed at Google, Microsoft, Amazon, and various top-tier startups. She believes in a hands-on, project-based approach to learning.
+                        <p className="text-slate-600 leading-relaxed mb-4">
+                {mentor?.bio || "This mentor has not added a detailed bio yet."}
             </p>
             <div className="mt-5">
               <h3 className="font-bold text-slate-800 mb-3">Mentoring Areas</h3>
@@ -148,12 +144,15 @@ export default function MentorProfile({ onNavigate }) {
             <h2 className="font-bold text-slate-800 text-lg mb-5">Experience & Education</h2>
             <div className="relative">
               <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-indigo-100"/>
-              {[
-                { type: "work", title: "Associate Professor", org: "IIT Bombay, CSE Dept.", period: "2019 – Present", desc: "Teaching ML, Deep Learning courses. Mentoring M.Tech and B.Tech students." },
-                { type: "work", title: "Assistant Professor", org: "NIT Warangal", period: "2016 – 2019", desc: "Founded the AI Research Lab. Published 12 papers in top conferences." },
-                { type: "edu", title: "PhD, Computer Science", org: "IIT Delhi", period: "2012 – 2016", desc: "Thesis: Adaptive Deep Learning for Healthcare Diagnostics" },
-                { type: "edu", title: "B.Tech, Computer Science", org: "BITS Pilani", period: "2008 – 2012", desc: "Gold Medalist · CGPA 9.8/10" },
-            ].map((e, i) => (<div key={i} className="relative pl-10 pb-6">
+                              {[
+                  {
+                    type: "work",
+                    title: `${mentor?.experience || 0} Years of Experience`,
+                    org: mentor?.org || "Organization not specified",
+                    period: "Professional Experience",
+                    desc: mentor?.bio || "No additional experience details available."
+                  }
+                ].map((e, i) => (<div key={i} className="relative pl-10 pb-6">
                   <div className={`absolute left-2 top-1 w-5 h-5 rounded-full border-2 flex items-center justify-center ${e.type === "work" ? "bg-indigo-600 border-indigo-600" : "bg-violet-600 border-violet-600"}`}>
                     <span className="text-white text-xs">{e.type === "work" ? "W" : "E"}</span>
                   </div>
@@ -192,44 +191,81 @@ export default function MentorProfile({ onNavigate }) {
             </div>
           </div>)}
 
-        {activeTab === "reviews" && (<div className="space-y-4">
-            <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm">
-              <div className="flex items-center gap-4 mb-4">
-                <div>
-                  <div className="text-4xl font-bold text-slate-900">4.9</div>
-                  <div className="text-yellow-400 text-lg">★★★★★</div>
-                  <div className="text-slate-500 text-xs">Based on 120 reviews</div>
+        <div className="space-y-4">
+
+  <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm">
+    <div className="flex items-center gap-4 mb-4">
+
+              <div>
+                <div className="text-4xl font-bold text-slate-900">
+                  {mentor?.averageRating || "0.0"}
                 </div>
-                <div className="flex-1 space-y-1.5">
-                  {[5, 4, 3, 2, 1].map(star => (<div key={star} className="flex items-center gap-2">
-                      <span className="text-xs text-slate-500 w-3">{star}</span>
-                      <span className="text-yellow-400 text-xs">★</span>
-                      <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                        <div className="h-full bg-yellow-400 rounded-full" style={{ width: star === 5 ? "85%" : star === 4 ? "12%" : "3%" }}/>
-                      </div>
-                    </div>))}
+
+                <div className="text-yellow-400 text-lg">
+                  {"★".repeat(Math.round(mentor?.averageRating || 0))}
+                  {"☆".repeat(5 - Math.round(mentor?.averageRating || 0))}
+                </div>
+
+                <div className="text-slate-500 text-xs">
+                  Based on {mentor?.reviewCount || 0} reviews
                 </div>
               </div>
+
             </div>
-            {reviews.map(r => (<div key={r.name} className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm">
+          </div>
+
+          {mentor?.reviews?.length > 0 ? (
+            mentor.reviews.map((review) => (
+              <div
+                key={review.id}
+                className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm"
+              >
                 <div className="flex items-start gap-3 mb-3">
-                  <div className={`w-9 h-9 ${r.bg} rounded-full flex items-center justify-center text-white font-bold text-xs flex-shrink-0`}>{r.avatar}</div>
+
+                  <div className="w-9 h-9 bg-indigo-500 rounded-full flex items-center justify-center text-white font-bold text-xs flex-shrink-0">
+                    {review.student_id?.slice(0, 2).toUpperCase() || "ST"}
+                  </div>
+
                   <div className="flex-1">
                     <div className="flex items-center justify-between">
-                      <span className="font-semibold text-slate-800">{r.name}</span>
-                      <span className="text-xs text-slate-400">{r.date}</span>
+                      <span className="font-semibold text-slate-800">
+                        Student
+                      </span>
+
+                      <span className="text-xs text-slate-400">
+                        {review.created_at
+                          ? new Date(review.created_at).toLocaleDateString()
+                          : ""}
+                      </span>
                     </div>
-                    <div className="text-yellow-400 text-sm">{"★".repeat(r.rating)}</div>
+
+                    <div className="text-yellow-400 text-sm">
+                      {"★".repeat(review.rating)}
+                      {"☆".repeat(5 - review.rating)}
+                    </div>
                   </div>
+
                 </div>
-                <p className="text-slate-600 text-sm leading-relaxed">{r.text}</p>
-              </div>))}
-          </div>)}
+
+                <p className="text-slate-600 text-sm leading-relaxed">
+                  {review.text || "No review text provided."}
+                </p>
+              </div>
+            ))
+          ) : (
+            <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm text-center">
+              <p className="text-slate-500">
+                No reviews yet for this mentor.
+              </p>
+            </div>
+          )}
+
+        </div>
 
         {activeTab === "mentoring" && (<div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm">
             <h2 className="font-bold text-slate-800 text-lg mb-3">Mentoring Style & Approach</h2>
             <p className="text-slate-600 leading-relaxed mb-5">
-              Dr. Sharma uses a project-based learning approach. Sessions are structured, outcome-focused, and tailored to the student's current level and career goals. She assigns exercises between sessions and follows up on progress.
+              {mentor?.bio || "This mentor has not added mentoring details yet."}
             </p>
             <div className="grid md:grid-cols-2 gap-4">
               {[
