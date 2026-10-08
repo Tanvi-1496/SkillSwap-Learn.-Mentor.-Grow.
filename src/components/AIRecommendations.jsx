@@ -66,13 +66,18 @@ export default function AIRecommendations({ onNavigate }) {
                     }
                 );
 
-                const data = await response.json();
-
                 if (!response.ok) {
+                    if (response.status === 404) {
+                        setMentors([]);
+                        return;
+                    }
+                    const errData = await response.json().catch(() => ({}));
                     throw new Error(
-                        data.error || "Failed to load recommendations."
+                        errData.error || "Failed to load recommendations."
                     );
                 }
+
+                const data = await response.json();
 
                 setMentors(
                     Array.isArray(data.recommendations)
@@ -290,7 +295,7 @@ export default function AIRecommendations({ onNavigate }) {
               </div>
 
               <div className="px-5 pb-5 flex gap-3">
-                <button className="flex-1 bg-white hover:bg-[#F5F7FC] text-[#172033] font-semibold py-2.5 rounded-xl text-sm transition-colors border border-[#E5E7EB] cursor-pointer" onClick={() => onNavigate("mentorProfile", { mentorId: m.mentor_id })}>
+                <button className="flex-1 bg-white hover:bg-[#F5F7FC] text-[#172033] font-semibold py-2.5 rounded-xl text-sm transition-colors border border-[#E5E7EB] cursor-pointer" onClick={() => onNavigate("mentorProfile", { mentorId: m.mentor_id, fromPage: "aiRecs" })}>
                   View Profile
                 </button>
                 <button className="flex-1 bg-[#4F46E5] hover:bg-[#4338CA] text-white font-semibold py-2.5 rounded-xl text-sm transition-colors shadow-xs cursor-pointer" onClick={() => onNavigate("booking", { mentorId: m.mentor_id })}>

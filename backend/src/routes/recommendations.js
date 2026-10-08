@@ -27,7 +27,18 @@ router.get("/", authMiddleware, async (req, res) => {
     try {
         result = await fetchRecommendations(studentId);
     } catch (error) {
-        // Log the underlying AI service failure server-side only.
+        // If the student has not completed their profile or has no embedding (404),
+        // return an empty recommendations list so the frontend displays its empty state.
+        if (error.status === 404) {
+            console.log(
+                `Student ${studentId} not ready for recommendations: ${error.message}`
+            );
+            return res.json({
+                recommendations: []
+            });
+        }
+
+        // Log actual AI service failure server-side only.
         console.error(
             "Recommendation service error:",
             error.message

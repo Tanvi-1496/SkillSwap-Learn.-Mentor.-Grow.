@@ -7,6 +7,7 @@ import mentorRoutes from "./routes/mentor.js";
 import recommendationRoutes from "./routes/recommendations.js";
 import bookingRoutes from "./routes/bookings.js";
 import adminRoutes from "./routes/admin.js";
+import reviewRoutes from "./routes/reviews.js";
 
 
 dotenv.config();
@@ -21,6 +22,7 @@ app.use("/mentors", mentorRoutes);
 app.use("/recommendations", recommendationRoutes);
 app.use("/bookings", bookingRoutes);
 app.use("/admin", adminRoutes);
+app.use("/reviews", reviewRoutes);
 
 app.get("/", (req, res) => {
     res.json({

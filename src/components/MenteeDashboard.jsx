@@ -8,7 +8,6 @@ const navItems = [
     { id: "aiRecs", label: "AI Recommendations", icon: "🤖" },
     { id: "bookings", label: "My Bookings", icon: "📅" },
     { id: "sessions", label: "Sessions", icon: "🎥" },
-    { id: "messages", label: "Messages", icon: "💬" },
     { id: "feedback", label: "Feedback", icon: "⭐" },
     { id: "aiChat", label: "AI Assistant", icon: "✨" },
     { id: "profile", label: "Profile", icon: "👤" },
@@ -214,10 +213,16 @@ export default function MenteeDashboard({ onNavigate }) {
             onNavigate("aiRecs");
         else if (id === "search")
             onNavigate("search");
-        else if (id === "bookings")
+        else if (id === "bookings" || id === "sessions")
             onNavigate("bookings");
         else if (id === "profile")
             onNavigate("profile");
+        else if (id === "requirements")
+            onNavigate("menteeRequirements");
+        else if (id === "feedback")
+            onNavigate("feedback");
+        else if (id === "settings")
+            onNavigate("settings");
         else if (id === "aiChat")
             setShowAIChat(true);
     };

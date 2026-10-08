@@ -10,7 +10,6 @@ const navItems = [
     { id: "upcoming", label: "Upcoming Sessions", icon: "📅" },
     { id: "completed", label: "Completed Sessions", icon: "✅" },
     { id: "reviews", label: "Reviews", icon: "⭐" },
-    { id: "messages", label: "Messages", icon: "💬" },
     { id: "settings", label: "Settings", icon: "⚙️" },
 ];
 
@@ -84,6 +83,7 @@ export default function MentorDashboard({ onNavigate }) {
     const [savingAvail, setSavingAvail] = useState(false);
     const [availFeedback, setAvailFeedback] = useState(null);
     const [bookingFeedback, setBookingFeedback] = useState(null);
+    const [mentorReviews, setMentorReviews] = useState([]);
 
     const loadMentorData = async () => {
         try {
@@ -125,6 +125,21 @@ export default function MentorDashboard({ onNavigate }) {
                         });
                         return updated;
                     });
+                }
+            }
+
+            // Also load reviews for this mentor
+            if (session?.user?.id) {
+                try {
+                    const revRes = await fetch(`http://localhost:5000/mentors/${session.user.id}`);
+                    if (revRes.ok) {
+                        const revData = await revRes.json();
+                        if (Array.isArray(revData.mentor?.reviews)) {
+                            setMentorReviews(revData.mentor.reviews);
+                        }
+                    }
+                } catch (revErr) {
+                    console.warn("Could not load mentor reviews:", revErr);
                 }
             }
         } catch (err) {
@@ -396,7 +411,13 @@ export default function MentorDashboard({ onNavigate }) {
                         <button
                             key={item.id}
                             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all mb-0.5 ${activeNav === item.id ? "bg-[#4F46E5] text-white shadow-xs" : "text-[#718096] hover:bg-[#F5F7FC] hover:text-[#172033]"}`}
-                            onClick={() => setActiveNav(item.id)}
+                            onClick={() => {
+                                if (item.id === "settings") {
+                                    onNavigate("settings");
+                                } else {
+                                    setActiveNav(item.id);
+                                }
+                            }}
                         >
                             <span>{item.icon}</span>
                             {item.label}
@@ -817,12 +838,120 @@ export default function MentorDashboard({ onNavigate }) {
               </div>
           )}
 
+          {activeNav === "profile" && (
+              <div className="bg-white rounded-2xl p-6 md:p-8 border border-[#E5E7EB] shadow-xs max-w-3xl">
+                  <div className="flex items-center gap-5 mb-6 pb-6 border-b border-[#E5E7EB]">
+                      <div className="w-16 h-16 bg-[#4F46E5] text-white rounded-full flex items-center justify-center font-bold text-2xl shadow-sm flex-shrink-0">
+                          {getInitials(mentorProfile?.name)}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                              <h2 className="text-xl font-bold text-[#172033]">{mentorProfile?.name || "Mentor"}</h2>
+                              <span className="bg-emerald-50 text-emerald-700 border border-emerald-200/60 text-xs font-semibold px-2.5 py-0.5 rounded-full">
+                                  {mentorProfile?.verified ? "✓ Verified Mentor" : "Active Mentor"}
+                              </span>
+                          </div>
+                          <p className="text-sm font-semibold text-[#4F46E5] mt-0.5">{mentorProfile?.mentor_type || "Mentor"}</p>
+                          <p className="text-xs text-[#718096] mt-1">{mentorProfile?.org || "Organization"} · {mentorProfile?.dept || "Department"}</p>
+                      </div>
+                  </div>
+
+                  <div className="space-y-6">
+                      <div>
+                          <h3 className="font-bold text-[#172033] text-sm mb-2">About / Bio</h3>
+                          <div className="text-sm text-[#172033]/80 bg-[#F5F7FC] p-4 rounded-xl border border-[#E5E7EB] leading-relaxed">
+                              {mentorProfile?.bio || "No bio added yet."}
+                          </div>
+                      </div>
+
+                      <div className="grid sm:grid-cols-2 gap-4">
+                          <div className="bg-[#F5F7FC] p-4 rounded-xl border border-[#E5E7EB]">
+                              <p className="text-xs text-[#718096] mb-1 font-medium">Email Address</p>
+                              <p className="text-sm font-semibold text-[#172033]">{mentorProfile?.email || "N/A"}</p>
+                          </div>
+                          <div className="bg-[#F5F7FC] p-4 rounded-xl border border-[#E5E7EB]">
+                              <p className="text-xs text-[#718096] mb-1 font-medium">Experience</p>
+                              <p className="text-sm font-semibold text-[#172033]">{mentorProfile?.experience !== undefined ? `${mentorProfile.experience} years` : "N/A"}</p>
+                          </div>
+                      </div>
+
+                      <div>
+                          <div className="flex items-center justify-between mb-3">
+                              <h3 className="font-bold text-[#172033] text-sm">Skills & Expertise</h3>
+                              <button
+                                  type="button"
+                                  onClick={() => setActiveNav("skills")}
+                                  className="text-xs font-semibold text-[#4F46E5] hover:text-[#4338CA] cursor-pointer"
+                              >
+                                  Manage Skills →
+                              </button>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                              {(mentorProfile?.skills || []).map((s) => (
+                                  <span key={s} className="bg-[#EEF0FF] text-[#4F46E5] text-xs font-semibold px-3 py-1 rounded-full border border-[#EEF0FF]">
+                                      {s}
+                                  </span>
+                              ))}
+                          </div>
+                      </div>
+                  </div>
+              </div>
+          )}
+
+          {activeNav === "reviews" && (
+              <div className="space-y-4 max-w-3xl">
+                  <div className="bg-white rounded-2xl p-6 border border-[#E5E7EB] shadow-xs">
+                      <h2 className="font-bold text-[#172033] text-lg mb-1">Student Reviews & Ratings</h2>
+                      <p className="text-[#718096] text-xs mb-4">Feedback from mentees who attended sessions with you</p>
+                      <div className="flex items-center gap-4">
+                          <div className="text-3xl font-bold text-[#172033]">
+                              {mentorReviews.length > 0
+                                  ? (mentorReviews.reduce((sum, r) => sum + r.rating, 0) / mentorReviews.length).toFixed(1)
+                                  : "5.0"}
+                          </div>
+                          <div className="text-amber-400 text-lg">
+                              {"★".repeat(mentorReviews.length > 0 ? Math.round(mentorReviews.reduce((sum, r) => sum + r.rating, 0) / mentorReviews.length) : 5)}
+                          </div>
+                          <span className="text-[#718096] text-xs">({mentorReviews.length} {mentorReviews.length === 1 ? "review" : "reviews"})</span>
+                      </div>
+                  </div>
+
+                  {mentorReviews.length > 0 ? (
+                      mentorReviews.map((rev) => (
+                          <div key={rev.id} className="bg-white rounded-2xl p-5 border border-[#E5E7EB] shadow-xs">
+                              <div className="flex items-center justify-between mb-2">
+                                  <div className="flex items-center gap-2">
+                                      <div className="w-8 h-8 bg-[#4F46E5] text-white rounded-full flex items-center justify-center font-bold text-xs">
+                                          {rev.student_name ? getInitials(rev.student_name) : (rev.student_id || "ST").slice(0, 2).toUpperCase()}
+                                      </div>
+                                      <span className="font-semibold text-sm text-[#172033]">{rev.student_name || "Student"}</span>
+                                  </div>
+                                  <div className="text-amber-400 text-xs">
+                                      {"★".repeat(rev.rating)}
+                                      {"☆".repeat(5 - rev.rating)}
+                                  </div>
+                              </div>
+                              <p className="text-sm text-[#172033]/80">{rev.text || "No written feedback provided."}</p>
+                          </div>
+                      ))
+                  ) : (
+                      <div className="bg-white rounded-2xl p-10 border border-[#E5E7EB] shadow-xs text-center">
+                          <div className="text-4xl mb-3">⭐</div>
+                          <h3 className="font-bold text-[#172033] text-base mb-1">No Reviews Yet</h3>
+                          <p className="text-[#718096] text-xs">Reviews will appear here once students complete sessions with you.</p>
+                      </div>
+                  )}
+              </div>
+          )}
+
           {activeNav !== "dashboard" &&
            activeNav !== "requests" &&
            activeNav !== "upcoming" &&
            activeNav !== "completed" &&
            activeNav !== "availability" &&
-           activeNav !== "skills" && (
+           activeNav !== "skills" &&
+           activeNav !== "profile" &&
+           activeNav !== "reviews" && (
               <div className="bg-white rounded-2xl p-10 border border-slate-100 shadow-sm text-center max-w-md mx-auto">
                   <div className="text-5xl mb-4">{navItems.find(n => n.id === activeNav)?.icon}</div>
                   <h3 className="font-bold text-slate-700 text-lg mb-2">{navItems.find(n => n.id === activeNav)?.label}</h3>

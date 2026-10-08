@@ -5,8 +5,8 @@ export default function MentorProfile({ onNavigate, mentorId, fromPage }) {
     const [selectedDay, setSelectedDay] = useState("Monday");
     const [mentor, setMentor] = useState(null);
 
-    const targetBack = fromPage === "aiRecs" ? "aiRecs" : fromPage === "menteeDashboard" ? "menteeDashboard" : "search";
-    const targetLabel = fromPage === "aiRecs" ? "AI Recommendations" : fromPage === "menteeDashboard" ? "Dashboard" : "Mentors Directory";
+    const targetBack = fromPage === "aiRecs" ? "aiRecs" : fromPage === "menteeDashboard" ? "menteeDashboard" : fromPage === "landing" ? "landing" : "search";
+    const targetLabel = fromPage === "aiRecs" ? "AI Recommendations" : fromPage === "menteeDashboard" ? "Dashboard" : fromPage === "landing" ? "Home" : "Mentors Directory";
 
     const getInitials = (name) => {
         if (!name || typeof name !== "string") return "M";
@@ -44,6 +44,24 @@ export default function MentorProfile({ onNavigate, mentorId, fromPage }) {
                 console.error("Mentor profile fetch error:", error);
             });
     }, [mentorId]);
+
+    if (!mentorId && !mentor) {
+        return (
+            <div className="min-h-screen bg-[#F5F7FC] flex items-center justify-center p-6 text-center">
+                <div className="bg-white rounded-2xl p-8 max-w-md w-full border border-[#E5E7EB] shadow-xs">
+                    <div className="text-5xl mb-4">👨‍🏫</div>
+                    <h2 className="text-xl font-bold text-[#172033] mb-2">No Mentor Selected</h2>
+                    <p className="text-sm text-[#718096] mb-6">Please select a mentor from the directory to view their complete profile.</p>
+                    <button
+                        onClick={() => onNavigate("search")}
+                        className="bg-[#4F46E5] text-white text-sm font-semibold px-5 py-2.5 rounded-xl hover:bg-[#4338CA] transition-colors cursor-pointer"
+                    >
+                        Browse Mentors
+                    </button>
+                </div>
+            </div>
+        );
+    }
 
     const mentorInitials = getInitials(mentor?.name);
 

@@ -14,8 +14,8 @@ function getUserSupabase(req) {
     }
 
     return createClient(
-        process.env.SUPABASE_URL,
-        process.env.SUPABASE_PUBLISHABLE_KEY,
+        (process.env.SUPABASE_URL || "").trim(),
+        (process.env.SUPABASE_PUBLISHABLE_KEY || "").trim(),
         {
             global: {
                 headers: {
@@ -35,7 +35,11 @@ router.get("/", authMiddleware, async (req, res) => {
             .select(`
                 *,
                 student_profiles (
-                    semester
+                    semester,
+                    skills,
+                    career_goal,
+                    learning_requirement,
+                    level
                 )
             `)
             .eq("id", req.user.id)
@@ -70,24 +74,40 @@ router.put("/", authMiddleware, async (req, res) => {
             skills,
             careerGoal,
             learningRequirement,
-            level
+            level,
+            phone,
+            name
         } = req.body;
 
         // 1. Update basic user information
-        const { data: user, error: userError } =
-            await userSupabase
-                .from("users")
-                .update({
-                    dept: department
-                })
-                .eq("id", req.user.id)
-                .select()
-                .single();
+        const userUpdates = {};
+        if (department !== undefined) userUpdates.dept = department;
+        if (phone !== undefined) userUpdates.phone = phone;
+        if (name !== undefined) userUpdates.name = name;
 
-        if (userError) {
-            return res.status(400).json({
-                error: userError.message
-            });
+        let user = null;
+        if (Object.keys(userUpdates).length > 0) {
+            const { data: updatedUser, error: userError } =
+                await userSupabase
+                    .from("users")
+                    .update(userUpdates)
+                    .eq("id", req.user.id)
+                    .select()
+                    .single();
+
+            if (userError) {
+                return res.status(400).json({
+                    error: userError.message
+                });
+            }
+            user = updatedUser;
+        } else {
+            const { data: currentUser } = await userSupabase
+                .from("users")
+                .select("*")
+                .eq("id", req.user.id)
+                .single();
+            user = currentUser;
         }
 
         // 2. Check whether student profile already exists

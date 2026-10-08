@@ -29,6 +29,7 @@ export default function MyBookings({ onNavigate }) {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [cancellingId, setCancellingId] = useState(null);
+    const [completingId, setCompletingId] = useState(null);
     const [confirmModal, setConfirmModal] = useState(null);
     const [actionFeedback, setActionFeedback] = useState(null);
     const [userRole, setUserRole] = useState("student");
@@ -148,6 +149,57 @@ export default function MyBookings({ onNavigate }) {
             });
         } finally {
             setCancellingId(null);
+        }
+    };
+
+    const handleCompleteBooking = async (bookingId) => {
+        try {
+            setCompletingId(bookingId);
+            setActionFeedback(null);
+
+            const {
+                data: { session }
+            } = await supabase.auth.getSession();
+
+            const token = session?.access_token;
+            if (!token) {
+                setActionFeedback({
+                    type: "error",
+                    message: "Session expired. Please log in again."
+                });
+                return;
+            }
+
+            const response = await fetch(`http://localhost:5000/bookings/${bookingId}`, {
+                method: "PATCH",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    status: "completed"
+                })
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.error || "Failed to mark session as completed");
+            }
+
+            setActionFeedback({
+                type: "success",
+                message: "Session marked as completed! You can now provide feedback."
+            });
+            await loadBookings();
+        } catch (err) {
+            console.error("Complete booking error:", err);
+            setActionFeedback({
+                type: "error",
+                message: err.message || "Could not mark booking completed."
+            });
+        } finally {
+            setCompletingId(null);
         }
     };
 
@@ -335,6 +387,15 @@ export default function MyBookings({ onNavigate }) {
                                         </div>
                                     </div>
                                     <div className="flex gap-2 mt-4 flex-wrap">
+                                        {tab === "Upcoming" && (
+                                            <button
+                                                disabled={completingId === b.id}
+                                                onClick={() => handleCompleteBooking(b.id)}
+                                                className="text-xs font-semibold bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200/60 px-3 py-1.5 rounded-xl transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+                                            >
+                                                {completingId === b.id ? "Updating..." : "✓ Mark Completed"}
+                                            </button>
+                                        )}
                                         {(tab === "Upcoming" || tab === "Pending") && (
                                             <button
                                                 className="text-xs font-semibold bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200/60 px-3 py-1.5 rounded-xl transition-colors cursor-pointer"
@@ -344,8 +405,12 @@ export default function MyBookings({ onNavigate }) {
                                             </button>
                                         )}
                                         {tab === "Completed" && (
-                                            <button className="text-xs font-semibold bg-[#EEF0FF] hover:bg-[#4F46E5] hover:text-white text-[#4F46E5] border border-[#EEF0FF] px-3 py-1.5 rounded-xl transition-colors">
-                                                ★ Give Feedback
+                                            <button
+                                                onClick={() => onNavigate("feedback")}
+                                                className="text-xs font-semibold bg-[#EEF0FF] hover:bg-[#4F46E5] hover:text-white text-[#4F46E5] border border-[#EEF0FF] px-3.5 py-1.5 rounded-xl transition-colors cursor-pointer flex items-center gap-1.5"
+                                            >
+                                                <span>★</span>
+                                                <span>Give Feedback</span>
                                             </button>
                                         )}
                                     </div>

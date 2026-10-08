@@ -101,7 +101,7 @@ export default function Profile({ onNavigate }) {
                             </div>
                         </div>
                     </div>
-                ) : profile && (
+                ) : profile ? (
                 <>
                     <div className="bg-white rounded-2xl border border-[#E5E7EB] shadow-xs p-6 mb-6">
                         <div className="flex items-center gap-4">
@@ -175,6 +175,18 @@ export default function Profile({ onNavigate }) {
                         </div>
                     </div>
                 </>
+            ) : (
+                <div className="bg-white rounded-2xl border border-[#E5E7EB] shadow-xs p-10 text-center max-w-md mx-auto">
+                    <div className="text-4xl mb-3">👤</div>
+                    <h3 className="font-bold text-[#172033] text-lg mb-1">Profile Not Found</h3>
+                    <p className="text-sm text-[#718096] mb-6">Unable to load profile data. Please make sure you are signed in.</p>
+                    <button
+                        onClick={() => onNavigate ? onNavigate("login") : null}
+                        className="bg-[#4F46E5] hover:bg-[#4338CA] text-white text-xs font-semibold px-5 py-2.5 rounded-xl transition-colors shadow-xs cursor-pointer"
+                    >
+                        Sign In Again
+                    </button>
+                </div>
             )}
         </main>
     </div>

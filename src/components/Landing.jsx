@@ -327,7 +327,7 @@ export default function Landing({ onNavigate }) {
                 <span>{m.sessions} sessions</span>
                 <span>{m.experience}</span>
               </div>
-              <button className="w-full bg-indigo-50 hover:bg-indigo-600 hover:text-white text-indigo-700 font-semibold py-2 rounded-xl text-sm transition-all" onClick={() => onNavigate("mentorProfile")}>
+              <button className="w-full bg-indigo-50 hover:bg-indigo-600 hover:text-white text-indigo-700 font-semibold py-2 rounded-xl text-sm transition-all cursor-pointer" onClick={() => onNavigate("search")}>
                 View Profile
               </button>
             </div>))}

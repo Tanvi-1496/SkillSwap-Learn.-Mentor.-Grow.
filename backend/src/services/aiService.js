@@ -45,10 +45,11 @@ export async function fetchRecommendations(studentId) {
 
     if (!response.ok) {
         const errorText = await response.text();
-
-        throw new Error(
+        const error = new Error(
             `AI service error: ${errorText}`
         );
+        error.status = response.status;
+        throw error;
     }
 
     return await response.json();

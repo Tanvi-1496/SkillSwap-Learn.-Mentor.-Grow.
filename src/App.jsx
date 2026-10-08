@@ -12,6 +12,8 @@ import MentorDashboard from "./components/MentorDashboard";
 import AdminDashboard from "./components/AdminDashboard";
 import Profile from "./components/Profile";
 import MenteeRequirements from "./components/MenteeRequirements";
+import Feedback from "./components/Feedback";
+import Settings from "./components/Settings";
 export default function App() {
     const [page, setPage] = useState("landing");
     const [pageData, setPageData] = useState({});
@@ -46,6 +48,8 @@ export default function App() {
                                 { label: "Search", page: "search" },
                                 { label: "Mentor Dash", page: "mentorDashboard" },
                                 { label: "Admin", page: "adminDashboard" },
+                                { label: "Feedback", page: "feedback" },
+                                { label: "Settings", page: "settings" },
                             ].map((item) => (
                                 <button
                                     key={item.page}
@@ -102,6 +106,39 @@ export default function App() {
             {page === "mentorDashboard" && <MentorDashboard onNavigate={nav} />}
             {page === "adminDashboard" && <AdminDashboard onNavigate={nav} />}
             {page === "menteeRequirements" && <MenteeRequirements onNavigate={nav} />}
+            {page === "feedback" && <Feedback onNavigate={nav} />}
+            {page === "settings" && <Settings onNavigate={nav} />}
+            {![
+                "landing",
+                "login",
+                "register",
+                "menteeDashboard",
+                "aiRecs",
+                "mentorProfile",
+                "booking",
+                "bookings",
+                "search",
+                "profile",
+                "mentorDashboard",
+                "adminDashboard",
+                "menteeRequirements",
+                "feedback",
+                "settings"
+            ].includes(page) && (
+                <div className="min-h-screen bg-[#F5F7FC] flex items-center justify-center p-6 text-center">
+                    <div className="bg-white rounded-2xl p-8 max-w-md w-full border border-[#E5E7EB] shadow-xs">
+                        <div className="text-5xl mb-4">🔍</div>
+                        <h2 className="text-xl font-bold text-[#172033] mb-2">Page Not Found</h2>
+                        <p className="text-sm text-[#718096] mb-6">The page you requested does not exist or has been moved.</p>
+                        <button
+                            onClick={() => nav("landing")}
+                            className="bg-[#4F46E5] text-white text-sm font-semibold px-5 py-2.5 rounded-xl hover:bg-[#4338CA] transition-colors cursor-pointer"
+                        >
+                            Return to Homepage
+                        </button>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

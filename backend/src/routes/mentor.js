@@ -1,6 +1,19 @@
 import express from "express";
 import supabase from "../config/supabase.js";
 import authMiddleware from "../middleware/authMiddleware.js";
+import { generateProfileEmbedding } from "../services/aiService.js";
+
+function buildMentorEmbeddingText(mentor) {
+    return `
+Name: ${mentor.name || ""}.
+Skills: ${(mentor.skills || []).join(", ")}.
+Mentor type: ${mentor.mentor_type || ""}.
+Experience: ${mentor.experience ?? 0} years.
+Organization: ${mentor.org || ""}.
+Department: ${mentor.dept || ""}.
+Bio: ${mentor.bio || ""}.
+`.trim();
+}
 
 const router = express.Router();
 
@@ -306,13 +319,139 @@ router.put("/me/skills", authMiddleware, async (req, res) => {
             return res.status(500).json({ error: updateError.message });
         }
 
+        // Regenerate mentor SBERT embedding for matching
+        let embeddingSynced = false;
+        try {
+            const { data: fullProfile } = await supabase
+                .from("mentor_profiles")
+                .select("mentor_type, experience, bio, org")
+                .eq("user_id", mentorId)
+                .maybeSingle();
+
+            const { data: user } = await supabase
+                .from("users")
+                .select("name, dept")
+                .eq("id", mentorId)
+                .maybeSingle();
+
+            const embeddingText = buildMentorEmbeddingText({
+                name: user?.name,
+                skills: updated.skills,
+                mentor_type: fullProfile?.mentor_type,
+                experience: fullProfile?.experience,
+                org: fullProfile?.org,
+                dept: user?.dept,
+                bio: fullProfile?.bio
+            });
+
+            await generateProfileEmbedding(mentorId, "mentor", embeddingText);
+            embeddingSynced = true;
+            console.log(`Mentor embedding refreshed successfully for ${mentorId}`);
+        } catch (aiError) {
+            console.error("Mentor embedding refresh error:", aiError.message);
+        }
+
         res.json({
             message: "Skills updated successfully",
-            skills: updated.skills
+            skills: updated.skills,
+            embeddingSynced
         });
 
     } catch (error) {
         console.error("PUT /mentors/me/skills error:", error);
+        res.status(500).json({ error: "Internal server error" });
+    }
+});
+
+// ---------------------------------------------------------------------------
+// PUT /mentors/me (Update profile details and regenerate embedding)
+// ---------------------------------------------------------------------------
+router.put("/me", authMiddleware, async (req, res) => {
+    try {
+        const mentorId = req.user.id;
+        const { mentor_type, skills, experience, bio, org } = req.body;
+
+        // Verify mentor exists in mentor_profiles
+        const { data: mentorProfile, error: profileError } = await supabase
+            .from("mentor_profiles")
+            .select("*")
+            .eq("user_id", mentorId)
+            .maybeSingle();
+
+        if (profileError) {
+            return res.status(500).json({ error: profileError.message });
+        }
+
+        if (!mentorProfile) {
+            return res.status(404).json({ error: "Mentor profile not found" });
+        }
+
+        const updates = {};
+        if (mentor_type !== undefined) updates.mentor_type = mentor_type;
+        if (experience !== undefined) updates.experience = Number(experience);
+        if (bio !== undefined) updates.bio = bio;
+        if (org !== undefined) updates.org = org;
+        if (Array.isArray(skills)) {
+            const seen = new Set();
+            const cleaned = [];
+            for (const s of skills) {
+                if (typeof s === "string") {
+                    const trimmed = s.trim();
+                    const lower = trimmed.toLowerCase();
+                    if (trimmed && !seen.has(lower)) {
+                        seen.add(lower);
+                        cleaned.push(trimmed);
+                    }
+                }
+            }
+            updates.skills = cleaned;
+        }
+
+        const { data: updated, error: updateError } = await supabase
+            .from("mentor_profiles")
+            .update(updates)
+            .eq("user_id", mentorId)
+            .select()
+            .single();
+
+        if (updateError) {
+            return res.status(500).json({ error: updateError.message });
+        }
+
+        // Fetch user info for name & dept
+        const { data: user } = await supabase
+            .from("users")
+            .select("name, dept")
+            .eq("id", mentorId)
+            .maybeSingle();
+
+        let embeddingSynced = false;
+        try {
+            const embeddingText = buildMentorEmbeddingText({
+                name: user?.name,
+                skills: updated.skills,
+                mentor_type: updated.mentor_type,
+                experience: updated.experience,
+                org: updated.org,
+                dept: user?.dept,
+                bio: updated.bio
+            });
+
+            await generateProfileEmbedding(mentorId, "mentor", embeddingText);
+            embeddingSynced = true;
+            console.log(`Mentor embedding updated successfully for ${mentorId}`);
+        } catch (aiError) {
+            console.error("Mentor embedding refresh error:", aiError.message);
+        }
+
+        res.json({
+            message: "Mentor profile updated successfully",
+            profile: updated,
+            embeddingSynced
+        });
+
+    } catch (error) {
+        console.error("PUT /mentors/me error:", error);
         res.status(500).json({ error: "Internal server error" });
     }
 });
@@ -523,11 +662,31 @@ router.get("/:id", async (req, res) => {
             });
         }
 
+        // Enrich reviews with reviewer student name
+        let enrichedReviews = reviews || [];
+        if (reviews && reviews.length > 0) {
+            const studentIds = [...new Set(reviews.map((r) => r.student_id).filter(Boolean))];
+            if (studentIds.length > 0) {
+                const { data: studentUsers } = await supabase
+                    .from("users")
+                    .select("id, name")
+                    .in("id", studentIds);
+
+                if (studentUsers) {
+                    const studentMap = new Map(studentUsers.map((u) => [u.id, u.name]));
+                    enrichedReviews = reviews.map((r) => ({
+                        ...r,
+                        student_name: studentMap.get(r.student_id) || "Student"
+                    }));
+                }
+            }
+        }
+
         // Calculate average rating
         const averageRating =
-            reviews.length > 0
-                ? reviews.reduce((sum, review) => sum + review.rating, 0) /
-                  reviews.length
+            enrichedReviews.length > 0
+                ? enrichedReviews.reduce((sum, review) => sum + review.rating, 0) /
+                  enrichedReviews.length
                 : 0;
 
         const mentor = {
@@ -536,9 +695,9 @@ router.get("/:id", async (req, res) => {
             email: user?.email || "",
             org: mentorProfile.org || user?.org || "",
             availability: availability || [],
-            reviews: reviews || [],
+            reviews: enrichedReviews,
             averageRating: Number(averageRating.toFixed(1)),
-            reviewCount: reviews?.length || 0
+            reviewCount: enrichedReviews.length
         };
 
         res.json({
