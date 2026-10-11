@@ -65,12 +65,97 @@ function getInitials(name) {
     return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
-export default function MentorDashboard({ onNavigate }) {
-    const [activeNav, setActiveNav] = useState("dashboard");
+function timeTo12h(time24) {
+    if (!time24) return "";
+    const [hStr, mStr] = String(time24).split(":");
+    let h = parseInt(hStr, 10);
+    const m = mStr || "00";
+    const ampm = h >= 12 ? "PM" : "AM";
+    h = h % 12;
+    if (h === 0) h = 12;
+    return `${h}:${m} ${ampm}`;
+}
+
+function parse12hTo24h(time12) {
+    if (!time12) return "09:00";
+    const match = String(time12).trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
+    if (!match) {
+        const match24 = String(time12).trim().match(/^(\d{1,2}):(\d{2})$/);
+        if (match24) return `${match24[1].padStart(2, "0")}:${match24[2]}`;
+        return "09:00";
+    }
+    let h = parseInt(match[1], 10);
+    const m = match[2];
+    const ampm = (match[3] || "").toUpperCase();
+    if (ampm === "PM" && h < 12) h += 12;
+    if (ampm === "AM" && h === 12) h = 0;
+    return `${String(h).padStart(2, "0")}:${m}`;
+}
+
+function parseSlotTo24h(slotStr) {
+    if (!slotStr) return { start: "09:00", end: "10:00" };
+    const parts = String(slotStr).split("-").map((s) => s.trim());
+    const start24 = parse12hTo24h(parts[0]);
+    let end24 = parts[1] ? parse12hTo24h(parts[1]) : "";
+    if (!end24) {
+        const [h, m] = start24.split(":").map(Number);
+        const endH = (h + 1) % 24;
+        end24 = `${String(endH).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+    }
+    return { start: start24, end: end24 };
+}
+
+function toMinutes(time24) {
+    const [h, m] = String(time24).split(":").map(Number);
+    return (h || 0) * 60 + (m || 0);
+}
+
+function validateSlot(newStart24, newEnd24, existingSlots, excludeIndex = -1) {
+    if (!newStart24 || !newEnd24) return "Both start and end time are required.";
+    const startM = toMinutes(newStart24);
+    const endM = toMinutes(newEnd24);
+    if (endM <= startM) return "End time must be later than start time.";
+
+    const formatted = `${timeTo12h(newStart24)} - ${timeTo12h(newEnd24)}`;
+
+    for (let i = 0; i < existingSlots.length; i++) {
+        if (i === excludeIndex) continue;
+        const exist = existingSlots[i];
+        const { start: eStart24, end: eEnd24 } = parseSlotTo24h(exist);
+        const eStartM = toMinutes(eStart24);
+        const eEndM = toMinutes(eEnd24);
+
+        if (startM === eStartM && endM === eEndM) {
+            return `This time slot (${formatted}) already exists for this day.`;
+        }
+        if (startM < eEndM && endM > eStartM) {
+            return `Slot (${formatted}) overlaps with existing slot (${exist}).`;
+        }
+    }
+    return null;
+}
+
+export default function MentorDashboard({ onNavigate, initialTab }) {
+    const [activeNav, setActiveNav] = useState(initialTab || "dashboard");
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [avail, setAvail] = useState(defaultAvail);
     const [bookingsList, setBookingsList] = useState([]);
     const [actionId, setActionId] = useState(null);
+
+    // Time slot editor state
+    const [addingSlotDay, setAddingSlotDay] = useState(null);
+    const [newSlotStart, setNewSlotStart] = useState("09:00");
+    const [newSlotEnd, setNewSlotEnd] = useState("10:00");
+    const [editingSlot, setEditingSlot] = useState(null); // { day, idx }
+    const [editStart, setEditStart] = useState("");
+    const [editEnd, setEditEnd] = useState("");
+    const [slotError, setSlotError] = useState(null);
+
+    useEffect(() => {
+        if (initialTab && initialTab !== activeNav) {
+            setActiveNav(initialTab);
+        }
+    }, [initialTab]);
 
     // Mentor profile & skills state
     const [mentorProfile, setMentorProfile] = useState(null);
@@ -254,8 +339,20 @@ export default function MentorDashboard({ onNavigate }) {
     };
 
     // -----------------------------------------------------------------------
-    // Availability Handlers
+    // Availability & Slot Handlers
     // -----------------------------------------------------------------------
+    const handleTabClick = (tabId) => {
+        if (tabId === "settings") {
+            onNavigate("settings");
+        } else {
+            setActiveNav(tabId);
+            setSidebarOpen(false);
+            if (onNavigate) {
+                onNavigate("mentorDashboard", { tab: tabId });
+            }
+        }
+    };
+
     const toggleDay = (day) => {
         setAvail((prev) => {
             const current = prev[day];
@@ -265,11 +362,96 @@ export default function MentorDashboard({ onNavigate }) {
                 [day]: {
                     active: nextActive,
                     slots: nextActive && (!current.slots || current.slots.length === 0)
-                        ? ["5:00 PM", "6:00 PM", "7:00 PM"]
+                        ? ["5:00 PM - 6:00 PM", "6:00 PM - 7:00 PM"]
                         : current.slots
                 }
             };
         });
+        if (addingSlotDay === day) setAddingSlotDay(null);
+        if (editingSlot?.day === day) setEditingSlot(null);
+        setSlotError(null);
+    };
+
+    const handleStartAddSlot = (day) => {
+        setAddingSlotDay(day);
+        setEditingSlot(null);
+        setNewSlotStart("09:00");
+        setNewSlotEnd("10:00");
+        setSlotError(null);
+    };
+
+    const handleCancelAddSlot = () => {
+        setAddingSlotDay(null);
+        setSlotError(null);
+    };
+
+    const handleConfirmAddSlot = (day) => {
+        const error = validateSlot(newSlotStart, newSlotEnd, avail[day].slots || []);
+        if (error) {
+            setSlotError({ day, msg: error });
+            return;
+        }
+
+        const formatted = `${timeTo12h(newSlotStart)} - ${timeTo12h(newSlotEnd)}`;
+        setAvail((prev) => ({
+            ...prev,
+            [day]: {
+                ...prev[day],
+                slots: [...(prev[day].slots || []), formatted]
+            }
+        }));
+        setAddingSlotDay(null);
+        setSlotError(null);
+    };
+
+    const handleStartEditSlot = (day, idx, currentSlot) => {
+        const { start, end } = parseSlotTo24h(currentSlot);
+        setEditingSlot({ day, idx });
+        setEditStart(start);
+        setEditEnd(end);
+        setAddingSlotDay(null);
+        setSlotError(null);
+    };
+
+    const handleCancelEditSlot = () => {
+        setEditingSlot(null);
+        setSlotError(null);
+    };
+
+    const handleConfirmEditSlot = (day, idx) => {
+        const error = validateSlot(editStart, editEnd, avail[day].slots || [], idx);
+        if (error) {
+            setSlotError({ editDay: day, editIdx: idx, msg: error });
+            return;
+        }
+
+        const formatted = `${timeTo12h(editStart)} - ${timeTo12h(editEnd)}`;
+        setAvail((prev) => {
+            const nextSlots = [...(prev[day].slots || [])];
+            nextSlots[idx] = formatted;
+            return {
+                ...prev,
+                [day]: {
+                    ...prev[day],
+                    slots: nextSlots
+                }
+            };
+        });
+        setEditingSlot(null);
+        setSlotError(null);
+    };
+
+    const handleDeleteSlot = (day, idx) => {
+        if (editingSlot?.day === day && editingSlot?.idx === idx) {
+            setEditingSlot(null);
+        }
+        setAvail((prev) => ({
+            ...prev,
+            [day]: {
+                ...prev[day],
+                slots: (prev[day].slots || []).filter((_, i) => i !== idx)
+            }
+        }));
     };
 
     const handleSaveAvailability = async () => {
@@ -411,13 +593,7 @@ export default function MentorDashboard({ onNavigate }) {
                         <button
                             key={item.id}
                             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all mb-0.5 ${activeNav === item.id ? "bg-[#4F46E5] text-white shadow-xs" : "text-[#718096] hover:bg-[#F5F7FC] hover:text-[#172033]"}`}
-                            onClick={() => {
-                                if (item.id === "settings") {
-                                    onNavigate("settings");
-                                } else {
-                                    setActiveNav(item.id);
-                                }
-                            }}
+                            onClick={() => handleTabClick(item.id)}
                         >
                             <span>{item.icon}</span>
                             {item.label}
@@ -533,7 +709,7 @@ export default function MentorDashboard({ onNavigate }) {
                                 <div>
                                     <div className="flex items-center justify-between mb-4">
                                         <h3 className="font-bold text-[#172033]">📥 Booking Requests</h3>
-                                        <button className="text-[#4F46E5] text-sm font-semibold hover:text-[#4338CA]" onClick={() => setActiveNav("requests")}>
+                                        <button className="text-[#4F46E5] text-sm font-semibold hover:text-[#4338CA]" onClick={() => handleTabClick("requests")}>
                                             View All ({pendingRequests.length})
                                         </button>
                                     </div>
@@ -583,7 +759,7 @@ export default function MentorDashboard({ onNavigate }) {
                                 <div>
                                     <div className="flex items-center justify-between mb-4">
                                         <h3 className="font-bold text-[#172033]">📅 Upcoming Sessions</h3>
-                                        <button className="text-[#4F46E5] text-sm font-semibold hover:text-[#4338CA]" onClick={() => setActiveNav("upcoming")}>
+                                        <button className="text-[#4F46E5] text-sm font-semibold hover:text-[#4338CA]" onClick={() => handleTabClick("upcoming")}>
                                             View All ({upcomingList.length})
                                         </button>
                                     </div>
@@ -742,7 +918,7 @@ export default function MentorDashboard({ onNavigate }) {
                   <div className="flex items-center justify-between mb-4">
                       <div>
                           <h2 className="font-bold text-[#172033] text-lg">Manage Availability</h2>
-                          <p className="text-[#718096] text-sm mt-0.5">Select days and time slots when you are available for mentoring sessions.</p>
+                          <p className="text-[#718096] text-sm mt-0.5">Configure available days and add, edit, or remove specific timing slots.</p>
                       </div>
                   </div>
 
@@ -754,25 +930,178 @@ export default function MentorDashboard({ onNavigate }) {
 
                   <div className="space-y-4 mb-6">
                     {days.map(day => (
-                        <div key={day} className={`rounded-xl border transition-all ${avail[day].active ? "border-[#4F46E5]/30 bg-[#EEF0FF]/30" : "border-[#E5E7EB] bg-[#F5F7FC]/50"}`}>
-                            <div className="flex items-center gap-3 p-4">
-                              <button
-                                  type="button"
-                                  className={`w-10 h-6 rounded-full transition-all relative flex-shrink-0 cursor-pointer ${avail[day].active ? "bg-[#4F46E5]" : "bg-slate-200"}`}
-                                  onClick={() => toggleDay(day)}
-                              >
-                                  <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${avail[day].active ? "left-4" : "left-0.5"}`}/>
-                              </button>
-                              <span className={`font-semibold ${avail[day].active ? "text-[#4F46E5]" : "text-[#718096]"}`}>{day}</span>
-                              {avail[day].active && (
-                                  <div className="flex flex-wrap gap-1.5 ml-2">
-                                      {avail[day].slots.map(slot => (
-                                          <span key={slot} className="bg-white text-[#4F46E5] border border-[#EEF0FF] text-xs font-semibold px-2.5 py-1 rounded-full shadow-xs">{slot}</span>
-                                      ))}
-                                  </div>
-                              )}
-                              {!avail[day].active && <span className="text-[#718096] text-sm ml-1">Unavailable</span>}
+                        <div key={day} className={`rounded-xl border transition-all p-4 ${avail[day].active ? "border-[#4F46E5]/30 bg-[#EEF0FF]/20" : "border-[#E5E7EB] bg-[#F5F7FC]/50"}`}>
+                            {/* Day Header */}
+                            <div className="flex items-center justify-between flex-wrap gap-2">
+                                <div className="flex items-center gap-3">
+                                    <button
+                                        type="button"
+                                        className={`w-10 h-6 rounded-full transition-all relative flex-shrink-0 cursor-pointer ${avail[day].active ? "bg-[#4F46E5]" : "bg-slate-300"}`}
+                                        onClick={() => toggleDay(day)}
+                                    >
+                                        <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${avail[day].active ? "left-4" : "left-0.5"}`}/>
+                                    </button>
+                                    <span className={`font-semibold ${avail[day].active ? "text-[#172033]" : "text-[#718096]"}`}>{DAY_MAP[day]}</span>
+                                    {avail[day].active ? (
+                                        <span className="text-xs bg-indigo-50 text-[#4F46E5] font-semibold px-2 py-0.5 rounded-full border border-indigo-100">
+                                            {avail[day].slots.length} {avail[day].slots.length === 1 ? "slot" : "slots"}
+                                        </span>
+                                    ) : (
+                                        <span className="text-xs text-[#718096]">Unavailable</span>
+                                    )}
+                                </div>
+
+                                {avail[day].active && (
+                                    <button
+                                        type="button"
+                                        onClick={() => handleStartAddSlot(day)}
+                                        className="text-xs font-semibold text-[#4F46E5] hover:text-[#4338CA] hover:bg-[#EEF0FF] px-2.5 py-1.5 rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
+                                    >
+                                        <span>+ Add Time Slot</span>
+                                    </button>
+                                )}
                             </div>
+
+                            {/* Active Day Slots */}
+                            {avail[day].active && (
+                                <div className="mt-3 pt-3 border-t border-slate-200/60 space-y-2">
+                                    {/* Add Slot Form */}
+                                    {addingSlotDay === day && (
+                                        <div className="bg-white p-3.5 rounded-xl border border-indigo-200 shadow-xs mb-3">
+                                            <div className="text-xs font-semibold text-[#172033] mb-2">New slot for {DAY_MAP[day]}:</div>
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                <div className="flex items-center gap-1 text-xs text-[#718096]">
+                                                    <span>Start:</span>
+                                                    <input
+                                                        type="time"
+                                                        value={newSlotStart}
+                                                        onChange={(e) => setNewSlotStart(e.target.value)}
+                                                        className="border border-slate-300 rounded-lg px-2 py-1 text-xs font-medium text-[#172033] bg-white focus:outline-indigo-500"
+                                                    />
+                                                </div>
+                                                <span className="text-slate-400 text-xs">to</span>
+                                                <div className="flex items-center gap-1 text-xs text-[#718096]">
+                                                    <span>End:</span>
+                                                    <input
+                                                        type="time"
+                                                        value={newSlotEnd}
+                                                        onChange={(e) => setNewSlotEnd(e.target.value)}
+                                                        className="border border-slate-300 rounded-lg px-2 py-1 text-xs font-medium text-[#172033] bg-white focus:outline-indigo-500"
+                                                    />
+                                                </div>
+                                                <div className="flex items-center gap-1.5 ml-auto">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleConfirmAddSlot(day)}
+                                                        className="bg-[#4F46E5] text-white text-xs font-semibold px-3 py-1.5 rounded-lg hover:bg-[#4338CA] transition-colors cursor-pointer"
+                                                    >
+                                                        Add Slot
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={handleCancelAddSlot}
+                                                        className="text-slate-500 hover:text-slate-700 text-xs font-medium px-2 py-1.5 cursor-pointer"
+                                                    >
+                                                        Cancel
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            {slotError?.day === day && (
+                                                <div className="text-rose-600 text-xs mt-2 font-medium bg-rose-50 p-1.5 rounded-lg border border-rose-100">
+                                                    ⚠️ {slotError.msg}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* Slots List */}
+                                    {avail[day].slots.length === 0 && addingSlotDay !== day && (
+                                        <p className="text-xs text-[#718096] italic py-1">No time slots yet. Click &ldquo;+ Add Time Slot&rdquo; above to set available times.</p>
+                                    )}
+
+                                    <div className="flex flex-wrap gap-2">
+                                        {avail[day].slots.map((slot, sIdx) => {
+                                            const isEditing = editingSlot?.day === day && editingSlot?.idx === sIdx;
+                                            if (isEditing) {
+                                                return (
+                                                    <div key={sIdx} className="w-full bg-white p-3 rounded-xl border border-indigo-300 shadow-xs space-y-2">
+                                                        <div className="text-xs font-semibold text-[#172033]">Edit slot timing:</div>
+                                                        <div className="flex flex-wrap items-center gap-2">
+                                                            <div className="flex items-center gap-1 text-xs text-[#718096]">
+                                                                <span>Start:</span>
+                                                                <input
+                                                                    type="time"
+                                                                    value={editStart}
+                                                                    onChange={(e) => setEditStart(e.target.value)}
+                                                                    className="border border-slate-300 rounded-lg px-2 py-1 text-xs text-[#172033] bg-white focus:outline-indigo-500"
+                                                                />
+                                                            </div>
+                                                            <span className="text-slate-400 text-xs">to</span>
+                                                            <div className="flex items-center gap-1 text-xs text-[#718096]">
+                                                                <span>End:</span>
+                                                                <input
+                                                                    type="time"
+                                                                    value={editEnd}
+                                                                    onChange={(e) => setEditEnd(e.target.value)}
+                                                                    className="border border-slate-300 rounded-lg px-2 py-1 text-xs text-[#172033] bg-white focus:outline-indigo-500"
+                                                                />
+                                                            </div>
+                                                            <div className="flex items-center gap-1.5 ml-auto">
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => handleConfirmEditSlot(day, sIdx)}
+                                                                    className="bg-emerald-600 text-white text-xs font-semibold px-3 py-1 rounded-lg hover:bg-emerald-700 cursor-pointer"
+                                                                >
+                                                                    Save Slot
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={handleCancelEditSlot}
+                                                                    className="text-slate-400 hover:text-slate-600 text-xs font-medium px-2 py-1 cursor-pointer"
+                                                                >
+                                                                    Cancel
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                        {slotError?.editDay === day && slotError?.editIdx === sIdx && (
+                                                            <div className="text-rose-600 text-xs mt-1 font-medium bg-rose-50 p-1.5 rounded-lg border border-rose-100">
+                                                                ⚠️ {slotError.msg}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                );
+                                            }
+
+                                            return (
+                                                <div
+                                                    key={sIdx}
+                                                    className="bg-white hover:bg-slate-50 border border-slate-200 text-[#172033] text-xs font-semibold px-3 py-1.5 rounded-xl shadow-2xs flex items-center gap-2.5 transition-all"
+                                                >
+                                                    <span>🕒 {slot}</span>
+                                                    <div className="flex items-center gap-1 border-l border-slate-200 pl-1.5">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleStartEditSlot(day, sIdx, slot)}
+                                                            className="text-indigo-600 hover:text-indigo-800 p-0.5 rounded cursor-pointer"
+                                                            title="Edit slot timing"
+                                                        >
+                                                            ✏️
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleDeleteSlot(day, sIdx)}
+                                                            className="text-rose-500 hover:text-rose-700 p-0.5 rounded cursor-pointer font-bold"
+                                                            title="Delete slot"
+                                                        >
+                                                            ✕
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     ))}
                   </div>

@@ -10,7 +10,14 @@ const router = express.Router();
  */
 function normalizeTimeTo24h(timeStr) {
     if (!timeStr) return timeStr;
-    const trimmed = String(timeStr).trim();
+    let trimmed = String(timeStr).trim();
+
+    // If a time range is provided (e.g. "5:00 PM - 6:00 PM" or "17:00-18:00"), extract start time
+    if (trimmed.includes(" - ")) {
+        trimmed = trimmed.split(" - ")[0].trim();
+    } else if (trimmed.includes("-")) {
+        trimmed = trimmed.split("-")[0].trim();
+    }
 
     // 12-hour format e.g. "5:00 PM", "05:00 PM", "10:30 AM"
     const match12 = trimmed.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)$/i);

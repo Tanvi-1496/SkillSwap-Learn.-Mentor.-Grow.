@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { supabase } from "../lib/supabase";
-export default function Auth({ mode, onNavigate }) {
+export default function Auth({ mode, onNavigate, redirect }) {
     const [step, setStep] = useState(mode === "register" ? "role" : "form");
     const [role, setRole] = useState(null);
     const [mentorType, setMentorType] = useState("");
@@ -76,6 +76,30 @@ export default function Auth({ mode, onNavigate }) {
         return typeof role === "string" ? role.toLowerCase() : null;
     };
 
+    const navigatePostAuth = (userRole) => {
+        const roleDefault = userRole === "admin"
+            ? "adminDashboard"
+            : userRole === "mentor"
+            ? "mentorDashboard"
+            : "menteeDashboard";
+
+        if (redirect && redirect !== "login" && redirect !== "register" && redirect !== "landing") {
+            if (userRole === "mentor" && (redirect === "mentorDashboard" || redirect === "mentorProfile" || redirect === "settings")) {
+                onNavigate(redirect);
+                return;
+            }
+            if (userRole === "admin" && (redirect === "adminDashboard" || redirect === "settings")) {
+                onNavigate(redirect);
+                return;
+            }
+            if (userRole !== "mentor" && userRole !== "admin" && redirect !== "adminDashboard" && redirect !== "mentorDashboard") {
+                onNavigate(redirect);
+                return;
+            }
+        }
+        onNavigate(roleDefault);
+    };
+
     const handleLogin = async (e) => {
         e.preventDefault();
         setFeedback(null);
@@ -113,13 +137,7 @@ export default function Auth({ mode, onNavigate }) {
             }
 
             const userRole = getRole(result);
-            if (userRole === "admin") {
-                onNavigate("adminDashboard");
-            } else if (userRole === "mentor") {
-                onNavigate("mentorDashboard");
-            } else {
-                onNavigate("menteeDashboard");
-            }
+            navigatePostAuth(userRole);
         } catch (error) {
             console.error("Login error:", error.message);
             setFeedback({
@@ -183,13 +201,7 @@ export default function Auth({ mode, onNavigate }) {
 
             const registeredRole = getRole(result);
             setTimeout(() => {
-                if (registeredRole === "admin") {
-                    onNavigate("adminDashboard");
-                } else if (registeredRole === "mentor") {
-                    onNavigate("mentorDashboard");
-                } else {
-                    onNavigate("menteeDashboard");
-                }
+                navigatePostAuth(registeredRole);
             }, 500);
         } catch (error) {
             console.error("Registration error:", error.message);

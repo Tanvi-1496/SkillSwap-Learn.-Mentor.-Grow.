@@ -376,6 +376,8 @@ def get_recommendations(student_id: str):
                     "match_count": 15
                 }
             )
+            .order("similarity", desc=True)
+            .order("profile_id", desc=False)
             .execute()
         )
     except Exception as e:
@@ -390,6 +392,14 @@ def get_recommendations(student_id: str):
             "student_id": student_id,
             "recommendations": []
         }
+
+    # Ensure deterministic secondary ordering for candidate pool
+    matches.data.sort(
+        key=lambda m: (
+            -float(m.get("similarity") or 0.0) if m.get("similarity") == m.get("similarity") else 0.0,
+            str(m.get("profile_id") or "")
+        )
+    )
 
     recommendations = []
 
@@ -523,16 +533,28 @@ def get_recommendations(student_id: str):
             "experience_score": round(experience_score, 4),
             "rating_score": round(rating_score, 4),
             "availability_score": round(availability_score, 4),
-            "final_score": round(final_score, 4)
+            "final_score": round(final_score, 4),
+            "_review_count": len(mentor_ratings)
         })
 
     # --------------------------------------------------
-    # 5. Sort descending by final score
+    # 5. Deterministic multi-factor sort:
+    #    1. Higher final weighted score (descending)
+    #    2. Higher availability relevance (descending)
+    #    3. Higher review confidence / count (descending)
+    #    4. Stable unique mentor identifier (ascending)
     # --------------------------------------------------
     recommendations.sort(
-        key=lambda x: x["final_score"],
-        reverse=True
+        key=lambda x: (
+            -x["final_score"],
+            -x["availability_score"],
+            -x.get("_review_count", 0),
+            str(x["profile_id"])
+        )
     )
+
+    for r in recommendations:
+        r.pop("_review_count", None)
 
     # --------------------------------------------------
     # 6. Return ONLY Top 3
