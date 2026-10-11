@@ -26,13 +26,141 @@ const getInitials = (name) => {
     return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 };
 
+const matchesSkill = (skills, filter) => {
+    if (!filter || filter === "All") return true;
+    if (!Array.isArray(skills) || skills.length === 0) return false;
+    const cleanFilter = filter.toLowerCase().trim();
+
+    return skills.some((s) => {
+        if (!s || typeof s !== "string") return false;
+        const skill = s.toLowerCase().trim();
+
+        if (cleanFilter === "ml") {
+            return (
+                skill === "ml" ||
+                skill.includes("machine learning") ||
+                skill.includes("deep learning") ||
+                skill.includes("ml")
+            );
+        }
+        if (cleanFilter === "dsa") {
+            return (
+                skill === "dsa" ||
+                skill.includes("data structure") ||
+                skill.includes("algorithm") ||
+                skill.includes("problem solving")
+            );
+        }
+        if (cleanFilter === "data science") {
+            return (
+                skill.includes("data science") ||
+                skill.includes("data analysis") ||
+                skill.includes("analytics")
+            );
+        }
+        return skill.includes(cleanFilter);
+    });
+};
+
+const matchesMentorType = (mentorType, filter) => {
+    if (!filter || filter === "All") return true;
+    if (!mentorType) return false;
+    const cleanType = String(mentorType).toLowerCase().replace(/_/g, " ").trim();
+    const cleanFilter = String(filter).toLowerCase().replace(/_/g, " ").trim();
+
+    if (cleanFilter === "industry") {
+        return cleanType.includes("industry") || cleanType.includes("professional");
+    }
+    if (cleanFilter === "alumni") {
+        return cleanType.includes("alumni");
+    }
+    if (cleanFilter === "senior student") {
+        return cleanType.includes("senior") || cleanType.includes("student");
+    }
+    if (cleanFilter === "faculty") {
+        return cleanType.includes("faculty") || cleanType.includes("professor") || cleanType.includes("teacher");
+    }
+    return cleanType.includes(cleanFilter);
+};
+
 export default function AIRecommendations({ onNavigate }) {
     const [expandedWhy, setExpandedWhy] = useState(null);
+    const [selectedSkill, setSelectedSkill] = useState("");
+    const [selectedMentorType, setSelectedMentorType] = useState("");
+    const [selectedExperience, setSelectedExperience] = useState("");
+    const [selectedRating, setSelectedRating] = useState("");
     const [sortBy, setSortBy] = useState("Best Match");
     const [showArch, setShowArch] = useState(false);
     const [mentors, setMentors] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+
+    const filterStateMap = {
+        "Skill Match": {
+            value: selectedSkill,
+            onChange: setSelectedSkill,
+        },
+        "Mentor Type": {
+            value: selectedMentorType,
+            onChange: setSelectedMentorType,
+        },
+        "Experience": {
+            value: selectedExperience,
+            onChange: setSelectedExperience,
+        },
+        "Rating": {
+            value: selectedRating,
+            onChange: setSelectedRating,
+        },
+    };
+
+    const filteredAndSortedMentors = [...mentors]
+        .filter((m) => {
+            if (!matchesSkill(m.skills, selectedSkill)) return false;
+            if (!matchesMentorType(m.mentor_type, selectedMentorType)) return false;
+
+            // Experience filter
+            if (selectedExperience && selectedExperience !== "All") {
+                const expNum = m.experience !== null && m.experience !== undefined ? parseFloat(m.experience) : null;
+                if (expNum === null || isNaN(expNum)) return false;
+                if (selectedExperience === "1-3 years" && (expNum < 1 || expNum > 3)) return false;
+                if (selectedExperience === "4-6 years" && (expNum < 4 || expNum > 6)) return false;
+                if (selectedExperience === "7+ years" && expNum < 7) return false;
+            }
+
+            // Rating filter
+            if (selectedRating && selectedRating !== "All" && selectedRating !== "Any") {
+                const ratingScore = m.scores?.rating;
+                const ratingOutOfFive = typeof ratingScore === "number" && ratingScore > 0 ? ratingScore * 5 : 0;
+                if (selectedRating === "4.5+" && ratingOutOfFive < 4.5) return false;
+                if (selectedRating === "4.0+" && ratingOutOfFive < 4.0) return false;
+            }
+
+            return true;
+        })
+        .sort((a, b) => {
+            if (sortBy === "Best Match") {
+                const scoreA = typeof a.scores?.overall === "number" ? a.scores.overall : 0;
+                const scoreB = typeof b.scores?.overall === "number" ? b.scores.overall : 0;
+                return scoreB - scoreA;
+            }
+            if (sortBy === "Highest Rated") {
+                const rA = typeof a.scores?.rating === "number" ? a.scores.rating : 0;
+                const rB = typeof b.scores?.rating === "number" ? b.scores.rating : 0;
+                return rB - rA;
+            }
+            if (sortBy === "Most Experienced") {
+                const expA = a.experience !== null && a.experience !== undefined ? parseFloat(a.experience) || 0 : 0;
+                const expB = b.experience !== null && b.experience !== undefined ? parseFloat(b.experience) || 0 : 0;
+                return expB - expA;
+            }
+            if (sortBy === "Available Soonest") {
+                const avA = typeof a.scores?.availability === "number" ? a.scores.availability : 0;
+                const avB = typeof b.scores?.availability === "number" ? b.scores.availability : 0;
+                return avB - avA;
+            }
+            return 0;
+        });
 
     useEffect(() => {
         const loadRecommendations = async () => {
@@ -160,10 +288,24 @@ export default function AIRecommendations({ onNavigate }) {
         {/* Filters + Sort */}
         <div className="flex flex-wrap items-center gap-3 mb-6">
           <div className="flex-1 flex flex-wrap gap-2">
-            {filters.map(f => (<select key={f.label} className="text-sm border border-slate-200 bg-white rounded-xl px-3 py-2 text-slate-600 focus:outline-none focus:border-indigo-300 cursor-pointer">
-                <option value="">{f.label}</option>
-                {f.options.map(o => <option key={o}>{o}</option>)}
-              </select>))}
+            {filters.map(f => {
+              const state = filterStateMap[f.label];
+              return (
+                <select
+                  key={f.label}
+                  value={state?.value || ""}
+                  onChange={e => state?.onChange(e.target.value)}
+                  className="text-sm border border-slate-200 bg-white rounded-xl px-3 py-2 text-slate-600 focus:outline-none focus:border-indigo-300 cursor-pointer"
+                >
+                  <option value="">{f.label}</option>
+                  {f.options.map(o => (
+                    <option key={o} value={o === "All" ? "" : o}>
+                      {o}
+                    </option>
+                  ))}
+                </select>
+              );
+            })}
           </div>
           <div className="flex items-center gap-2">
             <span className="text-sm text-slate-500">Sort:</span>
@@ -177,7 +319,7 @@ export default function AIRecommendations({ onNavigate }) {
         <div className="flex items-center justify-between mb-4">
           <h2 className="font-bold text-slate-800">Recommended For You</h2>
           {!loading && !error && (<span className="text-slate-500 text-sm">
-              {mentors.length} {mentors.length === 1 ? "mentor" : "mentors"} found
+              {filteredAndSortedMentors.length} {filteredAndSortedMentors.length === 1 ? "mentor" : "mentors"} found
             </span>)}
         </div>
 
@@ -193,26 +335,49 @@ export default function AIRecommendations({ onNavigate }) {
             <div className="text-4xl mb-4">⚠️</div>
             <h3 className="font-bold text-slate-700 text-lg mb-2">Could not load recommendations</h3>
             <p className="text-slate-500 text-sm mb-5">{error}</p>
-            <button className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-6 py-2.5 rounded-xl transition-colors" onClick={() => onNavigate("menteeDashboard")}>
+            <button className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-6 py-2.5 rounded-xl transition-colors cursor-pointer" onClick={() => onNavigate("menteeDashboard")}>
               Back to Dashboard
             </button>
           </div>)}
 
-        {/* Empty state */}
+        {/* Initial Empty state */}
         {!loading && !error && mentors.length === 0 && (<div className="bg-white rounded-2xl p-12 border border-slate-100 shadow-sm text-center">
             <div className="text-5xl mb-4">🔍</div>
             <h3 className="font-bold text-slate-700 text-lg mb-2">No recommendations yet</h3>
             <p className="text-slate-400 text-sm mb-5">
               Complete your profile so the AI has enough information to match you with mentors.
             </p>
-            <button className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-6 py-2.5 rounded-xl transition-colors" onClick={() => onNavigate("menteeRequirements")}>
+            <button className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-6 py-2.5 rounded-xl transition-colors cursor-pointer" onClick={() => onNavigate("menteeRequirements")}>
               Complete Profile
             </button>
           </div>)}
 
+        {/* Filtered Empty state */}
+        {!loading && !error && mentors.length > 0 && filteredAndSortedMentors.length === 0 && (
+          <div className="bg-white rounded-2xl p-12 border border-slate-100 shadow-sm text-center">
+            <div className="text-4xl mb-4">🔍</div>
+            <h3 className="font-bold text-slate-700 text-lg mb-2">No mentors match your filters</h3>
+            <p className="text-slate-400 text-sm mb-5">
+              Try adjusting or resetting your filter criteria to see more recommendations.
+            </p>
+            <button
+              className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-6 py-2.5 rounded-xl transition-colors cursor-pointer"
+              onClick={() => {
+                setSelectedSkill("");
+                setSelectedMentorType("");
+                setSelectedExperience("");
+                setSelectedRating("");
+                setSortBy("Best Match");
+              }}
+            >
+              Reset Filters
+            </button>
+          </div>
+        )}
+
         {/* Results */}
-        {!loading && !error && mentors.length > 0 && (<div className="space-y-4">
-          {mentors.map((m, i) => {
+        {!loading && !error && filteredAndSortedMentors.length > 0 && (<div className="space-y-4">
+          {filteredAndSortedMentors.map((m, i) => {
             const overall = toPercent(m.scores?.overall);
             const semantic = toPercent(m.scores?.semantic_similarity);
             const goal = toPercent(m.scores?.goal_match);
@@ -279,7 +444,7 @@ export default function AIRecommendations({ onNavigate }) {
                 </button>
                 {expandedWhy === i && (<div className="mt-2 bg-[#EEF0FF] border border-[#EEF0FF] rounded-xl p-3 text-sm text-[#172033] space-y-2">
                     <p>
-                      This mentor scored <strong className="text-[#4F46E5]">{overall}%</strong> overall. The score combines
+                       This mentor scored <strong className="text-[#4F46E5]">{overall}%</strong> overall. The score combines
                       semantic similarity between your profile and the mentor&apos;s profile with
                       goal overlap, experience, rating and availability.
                     </p>
@@ -295,7 +460,19 @@ export default function AIRecommendations({ onNavigate }) {
               </div>
 
               <div className="px-5 pb-5 flex gap-3">
-                <button className="flex-1 bg-white hover:bg-[#F5F7FC] text-[#172033] font-semibold py-2.5 rounded-xl text-sm transition-colors border border-[#E5E7EB] cursor-pointer" onClick={() => onNavigate("mentorProfile", { mentorId: m.mentor_id, fromPage: "aiRecs" })}>
+                <button
+                  className="flex-1 bg-white hover:bg-[#F5F7FC] text-[#172033] font-semibold py-2.5 rounded-xl text-sm transition-colors border border-[#E5E7EB] cursor-pointer"
+                  onClick={() => {
+                    if (overall !== null) {
+                      sessionStorage.setItem(`ss_rec_score_${m.mentor_id}`, overall);
+                    }
+                    onNavigate("mentorProfile", {
+                      mentorId: m.mentor_id,
+                      fromPage: "aiRecs",
+                      matchScore: overall
+                    });
+                  }}
+                >
                   View Profile
                 </button>
                 <button className="flex-1 bg-[#4F46E5] hover:bg-[#4338CA] text-white font-semibold py-2.5 rounded-xl text-sm transition-colors shadow-xs cursor-pointer" onClick={() => onNavigate("booking", { mentorId: m.mentor_id })}>

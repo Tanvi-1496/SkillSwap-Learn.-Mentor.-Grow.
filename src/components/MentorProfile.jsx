@@ -1,12 +1,113 @@
 import { useEffect, useState } from "react";
 
-export default function MentorProfile({ onNavigate, mentorId, fromPage }) {
+export default function MentorProfile({
+    onNavigate,
+    mentorId,
+    fromPage,
+    matchScore,
+    pageData,
+    user
+}) {
     const [activeTab, setActiveTab] = useState("about");
     const [selectedDay, setSelectedDay] = useState("Monday");
     const [mentor, setMentor] = useState(null);
 
-    const targetBack = fromPage === "aiRecs" ? "aiRecs" : fromPage === "menteeDashboard" ? "menteeDashboard" : fromPage === "landing" ? "landing" : "search";
-    const targetLabel = fromPage === "aiRecs" ? "AI Recommendations" : fromPage === "menteeDashboard" ? "Dashboard" : fromPage === "landing" ? "Home" : "Mentors Directory";
+    // Resolve fallback destination if opened directly
+    const roleDefaultBack =
+        user?.role === "mentor"
+            ? "mentorDashboard"
+            : user?.role === "admin"
+            ? "adminDashboard"
+            : "search";
+
+    const targetBack =
+        fromPage === "aiRecs"
+            ? "aiRecs"
+            : fromPage === "menteeDashboard"
+            ? "menteeDashboard"
+            : fromPage === "landing"
+            ? "landing"
+            : fromPage === "search"
+            ? "search"
+            : roleDefaultBack;
+
+    const targetLabel =
+        fromPage === "aiRecs"
+            ? "AI Recommendations"
+            : fromPage === "menteeDashboard"
+            ? "Dashboard"
+            : fromPage === "landing"
+            ? "Home"
+            : fromPage === "search"
+            ? "Find Mentors"
+            : user?.role === "mentor" || user?.role === "admin"
+            ? "Dashboard"
+            : "Find Mentors";
+
+    // Handle return navigation preserving search filters if coming from search
+    const handleBack = () => {
+        if (targetBack === "search") {
+            onNavigate("search", {
+                search: pageData?.search,
+                filterType: pageData?.filterType,
+                filterRating: pageData?.filterRating,
+                view: pageData?.view,
+                sortBy: pageData?.sortBy
+            });
+        } else {
+            onNavigate(targetBack);
+        }
+    };
+
+    // AI recommendation score handling:
+    // Only displayed if navigated from AI recommendations with an authentic score.
+    // Preserved across page refresh via URL parameter / sessionStorage.
+    const parsedScore =
+        matchScore !== undefined && matchScore !== null
+            ? Number(matchScore)
+            : pageData?.matchScore !== undefined && pageData?.matchScore !== null
+            ? Number(pageData.matchScore)
+            : null;
+
+    const [resolvedMatchScore, setResolvedMatchScore] = useState(() => {
+        if (parsedScore !== null && !isNaN(parsedScore)) {
+            if (typeof window !== "undefined" && mentorId) {
+                try {
+                    window.sessionStorage.setItem(
+                        `ss_rec_score_${mentorId}`,
+                        String(parsedScore)
+                    );
+                } catch (_) {}
+            }
+            return parsedScore;
+        }
+        if (fromPage === "aiRecs" && typeof window !== "undefined" && mentorId) {
+            try {
+                const cached = window.sessionStorage.getItem(
+                    `ss_rec_score_${mentorId}`
+                );
+                if (cached !== null) {
+                    const num = Number(cached);
+                    if (!isNaN(num)) return num;
+                }
+            } catch (_) {}
+        }
+        return null;
+    });
+
+    useEffect(() => {
+        if (parsedScore !== null && !isNaN(parsedScore)) {
+            setResolvedMatchScore(parsedScore);
+            if (typeof window !== "undefined" && mentorId) {
+                try {
+                    window.sessionStorage.setItem(
+                        `ss_rec_score_${mentorId}`,
+                        String(parsedScore)
+                    );
+                } catch (_) {}
+            }
+        }
+    }, [parsedScore, mentorId]);
 
     const getInitials = (name) => {
         if (!name || typeof name !== "string") return "M";
@@ -71,7 +172,7 @@ export default function MentorProfile({ onNavigate, mentorId, fromPage }) {
             <header className="bg-white border-b border-[#e5e7eb] px-6 py-4 flex items-center justify-between sticky top-0 z-40 shadow-2xs">
                 <button
                     className="flex items-center gap-2 text-[#172033] hover:text-[#4f46e5] transition-colors text-sm font-semibold bg-[#f5f7fc] border border-[#e5e7eb] px-3.5 py-2 rounded-xl cursor-pointer"
-                    onClick={() => onNavigate(targetBack)}
+                    onClick={handleBack}
                 >
                     <span>←</span>
                     <span>Back to {targetLabel}</span>
@@ -107,10 +208,21 @@ export default function MentorProfile({ onNavigate, mentorId, fromPage }) {
                   </p>
                 </div>
                 <div className="flex flex-col items-end gap-2">
-                  <div className="bg-[#eef0ff] border border-[#c7d2fe]/40 rounded-2xl px-4 py-2 text-center">
-                    <div className="text-2xl font-bold text-[#4f46e5]">94%</div>
-                    <div className="text-[#4f46e5] text-xs font-semibold">Match Score</div>
-                  </div>
+                  {fromPage === "aiRecs" && resolvedMatchScore !== null ? (
+                    <div className="bg-[#eef0ff] border border-[#c7d2fe]/40 rounded-2xl px-4 py-2 text-center">
+                      <div className="text-2xl font-bold text-[#4f46e5]">
+                        {resolvedMatchScore}%
+                      </div>
+                      <div className="text-[#4f46e5] text-xs font-semibold">Match Score</div>
+                    </div>
+                  ) : (
+                    <div className="bg-[#f5f7fc] border border-[#e5e7eb] rounded-2xl px-4 py-2 text-center">
+                      <div className="text-xs font-bold text-[#4f46e5] flex items-center justify-center gap-1">
+                        <span>✓ Verified Profile</span>
+                      </div>
+                      <div className="text-[11px] font-medium text-[#718096] mt-0.5">Community Mentor</div>
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="flex flex-wrap gap-5 mt-4 text-sm text-[#718096]">

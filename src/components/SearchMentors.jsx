@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { supabase } from "../lib/supabase";
 
 function getInitials(name) {
     if (!name || typeof name !== "string") return "M";
@@ -14,13 +15,70 @@ function formatMentorType(type) {
     return clean.replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-export default function SearchMentors({ onNavigate }) {
-    const [search, setSearch] = useState("");
-    const [filterType, setFilterType] = useState("All");
-    const [filterRating, setFilterRating] = useState("All");
-    const [view, setView] = useState("grid");
+export default function SearchMentors({ onNavigate, user, pageData = {} }) {
+    const [search, setSearch] = useState(pageData?.search || "");
+    const [filterType, setFilterType] = useState(pageData?.filterType || "All");
+    const [filterRating, setFilterRating] = useState(pageData?.filterRating || "All");
+    const [view, setView] = useState(pageData?.view || "grid");
     const [mentors, setMentors] = useState([]);
     const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        if (pageData) {
+            if (pageData.search !== undefined) setSearch(pageData.search);
+            if (pageData.filterType !== undefined) setFilterType(pageData.filterType);
+            if (pageData.filterRating !== undefined) setFilterRating(pageData.filterRating);
+            if (pageData.view !== undefined) setView(pageData.view);
+        }
+    }, [pageData]);
+
+    useEffect(() => {
+        if (typeof window !== "undefined" && window.location.pathname.includes("search")) {
+            const params = new URLSearchParams(window.location.search);
+            if (search) params.set("search", search); else params.delete("search");
+            if (filterType && filterType !== "All") params.set("filterType", filterType); else params.delete("filterType");
+            if (filterRating && filterRating !== "All") params.set("filterRating", filterRating); else params.delete("filterRating");
+            if (view && view !== "grid") params.set("view", view); else params.delete("view");
+            const qs = params.toString();
+            const newUrl = qs ? `/search?${qs}` : "/search";
+            const currentUrl = window.location.pathname + window.location.search;
+            if (newUrl !== currentUrl) {
+                window.history.replaceState({ page: "search", pageData: { search, filterType, filterRating, view } }, "", newUrl);
+            }
+        }
+    }, [search, filterType, filterRating, view]);
+
+    const handleViewProfile = (mentorId) => {
+        onNavigate("mentorProfile", {
+            mentorId,
+            fromPage: "search",
+            search,
+            filterType,
+            filterRating,
+            view
+        });
+    };
+
+    const handleLogoClick = () => {
+        if (!user) {
+            onNavigate("landing");
+        } else if (user.role === "admin") {
+            onNavigate("adminDashboard");
+        } else if (user.role === "mentor") {
+            onNavigate("mentorDashboard");
+        } else {
+            onNavigate("menteeDashboard");
+        }
+    };
+
+    const handleLogout = async () => {
+        try {
+            await supabase.auth.signOut();
+        } catch (err) {
+            console.error("Logout error:", err);
+        }
+        onNavigate("landing");
+    };
 
     useEffect(() => {
         setLoading(true);
@@ -81,7 +139,7 @@ export default function SearchMentors({ onNavigate }) {
         <div className="min-h-screen bg-[#f5f7fc] text-[#172033]">
             {/* Navbar */}
             <header className="bg-white border-b border-[#e5e7eb] px-6 py-4 flex items-center justify-between sticky top-0 z-40 shadow-2xs">
-                <div className="flex items-center gap-3 cursor-pointer" onClick={() => onNavigate("landing")}>
+                <div className="flex items-center gap-3 cursor-pointer" onClick={handleLogoClick}>
                     <div className="w-8 h-8 bg-[#4f46e5] rounded-xl flex items-center justify-center text-white font-bold text-sm shadow-xs">
                         S
                     </div>
@@ -94,19 +152,85 @@ export default function SearchMentors({ onNavigate }) {
                     </span>
                 </div>
 
-                <div className="flex items-center gap-3">
-                    <button
-                        className="text-sm font-semibold text-[#172033] hover:text-[#4f46e5] px-3.5 py-2 rounded-xl hover:bg-[#f5f7fc] transition-colors cursor-pointer"
-                        onClick={() => onNavigate("login")}
-                    >
-                        Login
-                    </button>
-                    <button
-                        className="text-sm font-semibold bg-[#4f46e5] hover:bg-[#4338ca] text-white px-4 py-2 rounded-xl shadow-xs transition-colors cursor-pointer"
-                        onClick={() => onNavigate("register")}
-                    >
-                        Get Started
-                    </button>
+                <div className="flex items-center gap-2 sm:gap-3">
+                    {!user ? (
+                        <>
+                            <button
+                                className="text-sm font-semibold text-[#172033] hover:text-[#4f46e5] px-3.5 py-2 rounded-xl hover:bg-[#f5f7fc] transition-colors cursor-pointer"
+                                onClick={() => onNavigate("login", { redirect: "search" })}
+                            >
+                                Login
+                            </button>
+                            <button
+                                className="text-sm font-semibold bg-[#4f46e5] hover:bg-[#4338ca] text-white px-4 py-2 rounded-xl shadow-xs transition-colors cursor-pointer"
+                                onClick={() => onNavigate("register", { redirect: "search" })}
+                            >
+                                Get Started
+                            </button>
+                        </>
+                    ) : user.role === "admin" ? (
+                        <>
+                            <button
+                                className="text-xs sm:text-sm font-semibold text-[#172033] hover:text-[#4f46e5] px-3.5 py-2 rounded-xl hover:bg-[#f5f7fc] transition-colors cursor-pointer flex items-center gap-1.5"
+                                onClick={() => onNavigate("adminDashboard")}
+                            >
+                                <span>⚡</span>
+                                <span>Admin Console</span>
+                            </button>
+                            <button
+                                className="text-xs sm:text-sm font-semibold text-rose-600 hover:text-rose-700 px-3.5 py-2 rounded-xl hover:bg-rose-50 transition-colors cursor-pointer"
+                                onClick={handleLogout}
+                            >
+                                Sign Out
+                            </button>
+                        </>
+                    ) : user.role === "mentor" ? (
+                        <>
+                            <button
+                                className="text-xs sm:text-sm font-semibold text-[#172033] hover:text-[#4f46e5] px-3.5 py-2 rounded-xl hover:bg-[#f5f7fc] transition-colors cursor-pointer flex items-center gap-1.5"
+                                onClick={() => onNavigate("mentorDashboard")}
+                            >
+                                <span>📊</span>
+                                <span>Mentor Dashboard</span>
+                            </button>
+                            <button
+                                className="text-xs sm:text-sm font-semibold text-rose-600 hover:text-rose-700 px-3.5 py-2 rounded-xl hover:bg-rose-50 transition-colors cursor-pointer"
+                                onClick={handleLogout}
+                            >
+                                Sign Out
+                            </button>
+                        </>
+                    ) : (
+                        <>
+                            <button
+                                className="text-xs sm:text-sm font-semibold text-[#172033] hover:text-[#4f46e5] px-3 py-2 rounded-xl hover:bg-[#f5f7fc] transition-colors cursor-pointer flex items-center gap-1.5"
+                                onClick={() => onNavigate("menteeDashboard")}
+                            >
+                                <span>📊</span>
+                                <span className="hidden sm:inline">Dashboard</span>
+                            </button>
+                            <button
+                                className="text-xs sm:text-sm font-semibold text-[#4f46e5] bg-[#eef0ff] hover:bg-[#e0e7ff] px-3 py-2 rounded-xl transition-colors cursor-pointer flex items-center gap-1.5"
+                                onClick={() => onNavigate("aiRecs")}
+                            >
+                                <span>🤖</span>
+                                <span className="hidden sm:inline">AI Recs</span>
+                            </button>
+                            <button
+                                className="text-xs sm:text-sm font-semibold text-[#172033] hover:text-[#4f46e5] px-3 py-2 rounded-xl hover:bg-[#f5f7fc] transition-colors cursor-pointer flex items-center gap-1.5"
+                                onClick={() => onNavigate("bookings")}
+                            >
+                                <span>🗓</span>
+                                <span className="hidden sm:inline">Bookings</span>
+                            </button>
+                            <button
+                                className="text-xs sm:text-sm font-semibold text-rose-600 hover:text-rose-700 px-3 py-2 rounded-xl hover:bg-rose-50 transition-colors cursor-pointer"
+                                onClick={handleLogout}
+                            >
+                                Sign Out
+                            </button>
+                        </>
+                    )}
                 </div>
             </header>
 
@@ -316,7 +440,7 @@ export default function SearchMentors({ onNavigate }) {
                                     <div className="flex gap-2.5">
                                         <button
                                             className="flex-1 bg-[#f5f7fc] hover:bg-[#eef0ff] text-[#172033] hover:text-[#4f46e5] font-semibold py-2.5 rounded-xl text-xs transition-colors border border-[#e5e7eb] cursor-pointer"
-                                            onClick={() => onNavigate("mentorProfile", { mentorId: m.id, fromPage: "search" })}
+                                            onClick={() => handleViewProfile(m.id)}
                                         >
                                             View Profile
                                         </button>
@@ -379,7 +503,7 @@ export default function SearchMentors({ onNavigate }) {
                                     <div className="flex gap-2">
                                         <button
                                             className="bg-[#f5f7fc] hover:bg-[#eef0ff] text-[#172033] hover:text-[#4f46e5] font-semibold py-2 px-3.5 rounded-xl text-xs transition-colors border border-[#e5e7eb] cursor-pointer"
-                                            onClick={() => onNavigate("mentorProfile", { mentorId: m.id, fromPage: "search" })}
+                                            onClick={() => handleViewProfile(m.id)}
                                         >
                                             View
                                         </button>

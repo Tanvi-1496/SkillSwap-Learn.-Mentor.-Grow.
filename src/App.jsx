@@ -15,7 +15,7 @@ import MenteeRequirements from "./components/MenteeRequirements";
 import Feedback from "./components/Feedback";
 import Settings from "./components/Settings";
 
-const PUBLIC_PAGES = new Set(["landing", "login", "register"]);
+const PUBLIC_PAGES = new Set(["landing", "login", "register", "search", "mentorProfile"]);
 
 const ROLE_DEFAULT_PAGES = {
     admin: "adminDashboard",
@@ -24,8 +24,8 @@ const ROLE_DEFAULT_PAGES = {
 };
 
 const ROLE_ALLOWED_PAGES = {
-    admin: new Set(["adminDashboard", "settings"]),
-    mentor: new Set(["mentorDashboard", "mentorProfile", "settings"]),
+    admin: new Set(["adminDashboard", "settings", "search", "mentorProfile"]),
+    mentor: new Set(["mentorDashboard", "mentorProfile", "settings", "search"]),
     student: new Set([
         "menteeDashboard",
         "aiRecs",
@@ -80,12 +80,27 @@ function parseUrl() {
     const mentorId = search.get("mentorId") || undefined;
     const fromPage = search.get("fromPage") || undefined;
     const redirect = search.get("redirect") || undefined;
+    const searchParam = search.get("search") || undefined;
+    const filterType = search.get("filterType") || undefined;
+    const filterRating = search.get("filterRating") || undefined;
+    const view = search.get("view") || undefined;
+    const sortBy = search.get("sortBy") || undefined;
+    const matchScore = search.get("matchScore") || search.get("match") || undefined;
 
     const pageData = {};
     if (tab) pageData.tab = tab;
     if (mentorId) pageData.mentorId = mentorId;
     if (fromPage) pageData.fromPage = fromPage;
     if (redirect) pageData.redirect = redirect;
+    if (searchParam) pageData.search = searchParam;
+    if (filterType) pageData.filterType = filterType;
+    if (filterRating) pageData.filterRating = filterRating;
+    if (view) pageData.view = view;
+    if (sortBy) pageData.sortBy = sortBy;
+    if (matchScore !== undefined) {
+        const parsedScore = Number(matchScore);
+        if (!isNaN(parsedScore)) pageData.matchScore = parsedScore;
+    }
 
     return {
         page: ALL_VALID_PAGES.has(pageName) ? pageName : "landing",
@@ -103,6 +118,12 @@ function buildUrl(pageName, pageData = {}) {
     if (pageData.mentorId) params.set("mentorId", pageData.mentorId);
     if (pageData.fromPage) params.set("fromPage", pageData.fromPage);
     if (pageData.redirect) params.set("redirect", pageData.redirect);
+    if (pageData.search) params.set("search", pageData.search);
+    if (pageData.filterType && pageData.filterType !== "All") params.set("filterType", pageData.filterType);
+    if (pageData.filterRating && pageData.filterRating !== "All") params.set("filterRating", pageData.filterRating);
+    if (pageData.view && pageData.view !== "grid") params.set("view", pageData.view);
+    if (pageData.sortBy && pageData.sortBy !== "Best Match") params.set("sortBy", pageData.sortBy);
+    if (pageData.matchScore !== undefined && pageData.matchScore !== null) params.set("matchScore", pageData.matchScore);
 
     const qs = params.toString();
     return qs ? `${path}?${qs}` : path;
@@ -171,7 +192,7 @@ export default function App() {
                                 : ROLE_DEFAULT_PAGES[normalizedRole] || "menteeDashboard";
                             nav(dest, {}, true);
                         } else {
-                            setPage("landing");
+                            setPage(requestedPage);
                             setPageData(requestedData);
                         }
                     } else {
@@ -352,6 +373,9 @@ export default function App() {
                     onNavigate={nav}
                     mentorId={pageData.mentorId}
                     fromPage={pageData.fromPage}
+                    matchScore={pageData.matchScore}
+                    pageData={pageData}
+                    user={user}
                 />
             )}
             {page === "booking" && (
@@ -361,7 +385,13 @@ export default function App() {
                 />
             )}
             {page === "bookings" && <MyBookings onNavigate={nav} />}
-            {page === "search" && <SearchMentors onNavigate={nav} />}
+            {page === "search" && (
+                <SearchMentors
+                    onNavigate={nav}
+                    user={user}
+                    pageData={pageData}
+                />
+            )}
             {page === "profile" && <Profile onNavigate={nav} />}
             {page === "mentorDashboard" && <MentorDashboard onNavigate={nav} initialTab={pageData.tab} />}
             {page === "adminDashboard" && <AdminDashboard onNavigate={nav} />}
