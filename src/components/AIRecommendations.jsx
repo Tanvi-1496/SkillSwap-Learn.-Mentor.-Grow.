@@ -1,129 +1,254 @@
-import { useState } from "react";
-const mentors = [
-    {
-        name: "Dr. Priya Sharma",
-        type: "Faculty Mentor",
-        avatar: "PS",
-        bg: "bg-indigo-600",
-        skills: ["Python", "Machine Learning", "Data Science", "TensorFlow", "SQL"],
-        rating: 4.9,
-        exp: "8 years",
-        sessions: 120,
-        match: 94,
-        availability: "Sat Evening ✓",
-        workload: 40,
-        skillMatch: 92,
-        goalMatch: 96,
-        org: "IIT Bombay",
-        why: "Strong match for your Machine Learning and Data Science goals. Available during your preferred Saturday evening slot and has extensive project mentoring experience.",
-    },
-    {
-        name: "Neha Gupta",
-        type: "Alumni Mentor",
-        avatar: "NG",
-        bg: "bg-violet-600",
-        skills: ["Data Science", "Python", "Statistics", "R", "Tableau"],
-        rating: 4.8,
-        exp: "5 years",
-        sessions: 89,
-        match: 88,
-        availability: "Sat, Sun",
-        workload: 55,
-        skillMatch: 88,
-        goalMatch: 90,
-        org: "Google India",
-        why: "Alumna who works in Data Science at Google. Excellent for placement-focused mentoring and industry insights into data roles.",
-    },
-    {
-        name: "Arjun Nair",
-        type: "Industry Professional",
-        avatar: "AN",
-        bg: "bg-emerald-600",
-        skills: ["ML Ops", "Python", "AWS", "Data Engineering", "Spark"],
-        rating: 4.7,
-        exp: "6 years",
-        sessions: 64,
-        match: 82,
-        availability: "Weekday evenings",
-        workload: 30,
-        skillMatch: 84,
-        goalMatch: 80,
-        org: "Amazon",
-        why: "Strong ML Engineering background. Best for students targeting data engineering or ML ops roles in product companies.",
-    },
-    {
-        name: "Dr. Vikram Singh",
-        type: "Faculty Mentor",
-        avatar: "VS",
-        bg: "bg-pink-600",
-        skills: ["Deep Learning", "NLP", "Computer Vision", "Research"],
-        rating: 4.9,
-        exp: "10 years",
-        sessions: 145,
-        match: 78,
-        availability: "Wed, Fri",
-        workload: 65,
-        skillMatch: 80,
-        goalMatch: 75,
-        org: "NIT Delhi",
-        why: "Research-oriented mentor. Ideal if you're targeting higher studies or AI research roles. Availability doesn't match your preferred time.",
-    },
+import { useEffect, useState } from "react";
+import { supabase } from "../lib/supabase";
+
+const avatarColors = [
+    "bg-indigo-600",
+    "bg-violet-600",
+    "bg-emerald-600",
+    "bg-pink-600",
 ];
+
 const filters = [
     { label: "Skill Match", options: ["All", "Python", "ML", "Data Science", "DSA"] },
     { label: "Mentor Type", options: ["All", "Faculty", "Senior Student", "Alumni", "Industry"] },
     { label: "Experience", options: ["All", "1-3 years", "4-6 years", "7+ years"] },
     { label: "Rating", options: ["All", "4.5+", "4.0+", "Any"] },
 ];
+
+const toPercent = (value) =>
+    typeof value === "number" ? Math.round(value * 100) : null;
+
+const getInitials = (name) => {
+    if (!name || typeof name !== "string") return "M";
+    const parts = name.trim().split(/\s+/).filter(Boolean);
+    if (parts.length === 0) return "M";
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+};
+
+const matchesSkill = (skills, filter) => {
+    if (!filter || filter === "All") return true;
+    if (!Array.isArray(skills) || skills.length === 0) return false;
+    const cleanFilter = filter.toLowerCase().trim();
+
+    return skills.some((s) => {
+        if (!s || typeof s !== "string") return false;
+        const skill = s.toLowerCase().trim();
+
+        if (cleanFilter === "ml") {
+            return (
+                skill === "ml" ||
+                skill.includes("machine learning") ||
+                skill.includes("deep learning") ||
+                skill.includes("ml")
+            );
+        }
+        if (cleanFilter === "dsa") {
+            return (
+                skill === "dsa" ||
+                skill.includes("data structure") ||
+                skill.includes("algorithm") ||
+                skill.includes("problem solving")
+            );
+        }
+        if (cleanFilter === "data science") {
+            return (
+                skill.includes("data science") ||
+                skill.includes("data analysis") ||
+                skill.includes("analytics")
+            );
+        }
+        return skill.includes(cleanFilter);
+    });
+};
+
+const matchesMentorType = (mentorType, filter) => {
+    if (!filter || filter === "All") return true;
+    if (!mentorType) return false;
+    const cleanType = String(mentorType).toLowerCase().replace(/_/g, " ").trim();
+    const cleanFilter = String(filter).toLowerCase().replace(/_/g, " ").trim();
+
+    if (cleanFilter === "industry") {
+        return cleanType.includes("industry") || cleanType.includes("professional");
+    }
+    if (cleanFilter === "alumni") {
+        return cleanType.includes("alumni");
+    }
+    if (cleanFilter === "senior student") {
+        return cleanType.includes("senior") || cleanType.includes("student");
+    }
+    if (cleanFilter === "faculty") {
+        return cleanType.includes("faculty") || cleanType.includes("professor") || cleanType.includes("teacher");
+    }
+    return cleanType.includes(cleanFilter);
+};
+
 export default function AIRecommendations({ onNavigate }) {
     const [expandedWhy, setExpandedWhy] = useState(null);
+    const [selectedSkill, setSelectedSkill] = useState("");
+    const [selectedMentorType, setSelectedMentorType] = useState("");
+    const [selectedExperience, setSelectedExperience] = useState("");
+    const [selectedRating, setSelectedRating] = useState("");
     const [sortBy, setSortBy] = useState("Best Match");
     const [showArch, setShowArch] = useState(false);
-    return (<div className="min-h-screen bg-[#f8f9ff]">
+    const [mentors, setMentors] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+
+    const filterStateMap = {
+        "Skill Match": {
+            value: selectedSkill,
+            onChange: setSelectedSkill,
+        },
+        "Mentor Type": {
+            value: selectedMentorType,
+            onChange: setSelectedMentorType,
+        },
+        "Experience": {
+            value: selectedExperience,
+            onChange: setSelectedExperience,
+        },
+        "Rating": {
+            value: selectedRating,
+            onChange: setSelectedRating,
+        },
+    };
+
+    const filteredAndSortedMentors = [...mentors]
+        .filter((m) => {
+            if (!matchesSkill(m.skills, selectedSkill)) return false;
+            if (!matchesMentorType(m.mentor_type, selectedMentorType)) return false;
+
+            // Experience filter
+            if (selectedExperience && selectedExperience !== "All") {
+                const expNum = m.experience !== null && m.experience !== undefined ? parseFloat(m.experience) : null;
+                if (expNum === null || isNaN(expNum)) return false;
+                if (selectedExperience === "1-3 years" && (expNum < 1 || expNum > 3)) return false;
+                if (selectedExperience === "4-6 years" && (expNum < 4 || expNum > 6)) return false;
+                if (selectedExperience === "7+ years" && expNum < 7) return false;
+            }
+
+            // Rating filter
+            if (selectedRating && selectedRating !== "All" && selectedRating !== "Any") {
+                const ratingScore = m.scores?.rating;
+                const ratingOutOfFive = typeof ratingScore === "number" && ratingScore > 0 ? ratingScore * 5 : 0;
+                if (selectedRating === "4.5+" && ratingOutOfFive < 4.5) return false;
+                if (selectedRating === "4.0+" && ratingOutOfFive < 4.0) return false;
+            }
+
+            return true;
+        })
+        .sort((a, b) => {
+            if (sortBy === "Best Match") {
+                const scoreA = typeof a.scores?.overall === "number" ? a.scores.overall : 0;
+                const scoreB = typeof b.scores?.overall === "number" ? b.scores.overall : 0;
+                return scoreB - scoreA;
+            }
+            if (sortBy === "Highest Rated") {
+                const rA = typeof a.scores?.rating === "number" ? a.scores.rating : 0;
+                const rB = typeof b.scores?.rating === "number" ? b.scores.rating : 0;
+                return rB - rA;
+            }
+            if (sortBy === "Most Experienced") {
+                const expA = a.experience !== null && a.experience !== undefined ? parseFloat(a.experience) || 0 : 0;
+                const expB = b.experience !== null && b.experience !== undefined ? parseFloat(b.experience) || 0 : 0;
+                return expB - expA;
+            }
+            if (sortBy === "Available Soonest") {
+                const avA = typeof a.scores?.availability === "number" ? a.scores.availability : 0;
+                const avB = typeof b.scores?.availability === "number" ? b.scores.availability : 0;
+                return avB - avA;
+            }
+            return 0;
+        });
+
+    useEffect(() => {
+        const loadRecommendations = async () => {
+            setLoading(true);
+            setError(null);
+
+            try {
+                const {
+                    data: { session },
+                    error: sessionError
+                } = await supabase.auth.getSession();
+
+                if (sessionError) {
+                    throw new Error(sessionError.message);
+                }
+
+                const token = session?.access_token;
+
+                if (!token) {
+                    throw new Error(
+                        "Please log in to see your recommendations."
+                    );
+                }
+
+                const response = await fetch(
+                    "http://localhost:5000/recommendations",
+                    {
+                        headers: {
+                            Authorization: `Bearer ${token}`
+                        }
+                    }
+                );
+
+                if (!response.ok) {
+                    if (response.status === 404) {
+                        setMentors([]);
+                        return;
+                    }
+                    const errData = await response.json().catch(() => ({}));
+                    throw new Error(
+                        errData.error || "Failed to load recommendations."
+                    );
+                }
+
+                const data = await response.json();
+
+                setMentors(
+                    Array.isArray(data.recommendations)
+                        ? data.recommendations
+                        : []
+                );
+            } catch (err) {
+                console.error("Recommendation load error:", err.message);
+                setError(err.message);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        loadRecommendations();
+    }, []);
+
+    return (<div className="min-h-screen bg-[#F5F7FC]">
       {/* Top Bar */}
-      <header className="bg-white border-b border-slate-100 px-6 py-4 flex items-center gap-4 sticky top-0 z-40 shadow-sm">
-        <button className="flex items-center gap-2 text-slate-500 hover:text-indigo-600 transition-colors" onClick={() => onNavigate("menteeDashboard")}>
+      <header className="bg-white border-b border-[#E5E7EB] px-6 py-4 flex items-center gap-4 sticky top-0 z-40 shadow-xs">
+        <button className="flex items-center gap-2 text-sm font-semibold text-[#172033] hover:text-[#4F46E5] transition-colors bg-[#F5F7FC] px-3 py-1.5 rounded-xl border border-[#E5E7EB]" onClick={() => onNavigate("menteeDashboard")}>
           ← Back to Dashboard
         </button>
-        <div className="h-5 w-px bg-slate-200"/>
+        <div className="h-5 w-px bg-[#E5E7EB]"/>
         <div className="flex items-center gap-2">
-          <div className="w-7 h-7 bg-indigo-600 rounded-lg flex items-center justify-center">
-            <span className="text-white font-bold text-xs">S</span>
+          <div className="w-8 h-8 bg-[#4F46E5] rounded-xl flex items-center justify-center">
+            <span className="text-white font-bold text-sm">S</span>
           </div>
-          <span className="font-bold text-slate-800">SkillSwap</span>
+          <span className="font-bold text-[#172033]">SkillSwap</span>
         </div>
       </header>
 
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
         {/* Title */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center gap-2 bg-indigo-50 border border-indigo-100 rounded-full px-4 py-1.5 mb-4">
-            <span className="text-indigo-600 text-sm">🤖</span>
-            <span className="text-indigo-700 text-sm font-semibold">Powered by SBERT Semantic Matching</span>
+          <div className="inline-flex items-center gap-2 bg-[#EEF0FF] border border-[#EEF0FF] rounded-full px-4 py-1.5 mb-4 shadow-xs">
+            <span className="text-[#4F46E5] text-sm">🤖</span>
+            <span className="text-[#4F46E5] text-sm font-semibold">Powered by SBERT Semantic Matching</span>
           </div>
-          <h1 className="text-3xl font-bold text-slate-900 mb-2">AI-Powered Mentor Recommendations</h1>
-          <p className="text-slate-500 max-w-xl mx-auto">
-            Based on your skills, goals, requirements and preferences, we've found mentors who are the best fit for you.
+          <h1 className="text-3xl font-bold text-[#172033] mb-2">AI-Powered Mentor Recommendations</h1>
+          <p className="text-[#718096] max-w-xl mx-auto text-sm">
+            Based on your skills, goals, requirements and preferences, we&apos;ve found mentors who are the best fit for you.
           </p>
-        </div>
-
-        {/* Your Profile Summary */}
-        <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm mb-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="font-bold text-slate-800">Your Requirement Profile</h2>
-            <button className="text-indigo-600 text-sm font-semibold hover:text-indigo-700">Edit Profile</button>
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {[
-            { label: "Skills", value: "Python • Machine Learning • SQL", color: "bg-indigo-50 text-indigo-700" },
-            { label: "Goal", value: "Data Science Placement", color: "bg-violet-50 text-violet-700" },
-            { label: "Experience", value: "Intermediate", color: "bg-amber-50 text-amber-700" },
-            { label: "Preferred Time", value: "Saturday Evening", color: "bg-emerald-50 text-emerald-700" },
-        ].map(item => (<div key={item.label} className={`${item.color} rounded-xl px-3 py-2.5`}>
-                <div className="text-xs font-semibold opacity-70 mb-0.5">{item.label}</div>
-                <div className="text-sm font-bold">{item.value}</div>
-              </div>))}
-          </div>
         </div>
 
         {/* AI Architecture */}
@@ -146,9 +271,9 @@ export default function AIRecommendations({ onNavigate }) {
                 { sep: "↓" },
                 { icon: "🔗", label: "Semantic Similarity" },
                 { sep: "↓" },
-                { icon: "📊", label: "Exp + Availability + Rating + Workload" },
+                { icon: "📊", label: "Goal + Experience + Rating + Availability" },
                 { sep: "↓" },
-                { icon: "⚡", label: "Hybrid Compatibility Score" },
+                { icon: "⚡", label: "Weighted Compatibility Score" },
                 { sep: "↓" },
                 { icon: "🏆", label: "Mentor Ranking" },
                 { sep: "↓" },
@@ -163,10 +288,24 @@ export default function AIRecommendations({ onNavigate }) {
         {/* Filters + Sort */}
         <div className="flex flex-wrap items-center gap-3 mb-6">
           <div className="flex-1 flex flex-wrap gap-2">
-            {filters.map(f => (<select key={f.label} className="text-sm border border-slate-200 bg-white rounded-xl px-3 py-2 text-slate-600 focus:outline-none focus:border-indigo-300 cursor-pointer">
-                <option value="">{f.label}</option>
-                {f.options.map(o => <option key={o}>{o}</option>)}
-              </select>))}
+            {filters.map(f => {
+              const state = filterStateMap[f.label];
+              return (
+                <select
+                  key={f.label}
+                  value={state?.value || ""}
+                  onChange={e => state?.onChange(e.target.value)}
+                  className="text-sm border border-slate-200 bg-white rounded-xl px-3 py-2 text-slate-600 focus:outline-none focus:border-indigo-300 cursor-pointer"
+                >
+                  <option value="">{f.label}</option>
+                  {f.options.map(o => (
+                    <option key={o} value={o === "All" ? "" : o}>
+                      {o}
+                    </option>
+                  ))}
+                </select>
+              );
+            })}
           </div>
           <div className="flex items-center gap-2">
             <span className="text-sm text-slate-500">Sort:</span>
@@ -176,92 +315,173 @@ export default function AIRecommendations({ onNavigate }) {
           </div>
         </div>
 
-        {/* Results */}
+        {/* Results header */}
         <div className="flex items-center justify-between mb-4">
           <h2 className="font-bold text-slate-800">Recommended For You</h2>
-          <span className="text-slate-500 text-sm">{mentors.length} mentors found</span>
+          {!loading && !error && (<span className="text-slate-500 text-sm">
+              {filteredAndSortedMentors.length} {filteredAndSortedMentors.length === 1 ? "mentor" : "mentors"} found
+            </span>)}
         </div>
 
-        <div className="space-y-4">
-          {mentors.map((m, i) => (<div key={m.name} className="bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-md hover:border-indigo-100 transition-all overflow-hidden">
+        {/* Loading state */}
+        {loading && (<div className="bg-white rounded-2xl p-12 border border-slate-100 shadow-sm text-center">
+            <div className="text-4xl mb-4 animate-pulse">🤖</div>
+            <h3 className="font-bold text-slate-700 text-lg mb-2">Finding your best matches…</h3>
+            <p className="text-slate-400 text-sm">Running semantic matching against mentor profiles.</p>
+          </div>)}
+
+        {/* Error state */}
+        {!loading && error && (<div className="bg-white rounded-2xl p-12 border border-red-100 shadow-sm text-center">
+            <div className="text-4xl mb-4">⚠️</div>
+            <h3 className="font-bold text-slate-700 text-lg mb-2">Could not load recommendations</h3>
+            <p className="text-slate-500 text-sm mb-5">{error}</p>
+            <button className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-6 py-2.5 rounded-xl transition-colors cursor-pointer" onClick={() => onNavigate("menteeDashboard")}>
+              Back to Dashboard
+            </button>
+          </div>)}
+
+        {/* Initial Empty state */}
+        {!loading && !error && mentors.length === 0 && (<div className="bg-white rounded-2xl p-12 border border-slate-100 shadow-sm text-center">
+            <div className="text-5xl mb-4">🔍</div>
+            <h3 className="font-bold text-slate-700 text-lg mb-2">No recommendations yet</h3>
+            <p className="text-slate-400 text-sm mb-5">
+              Complete your profile so the AI has enough information to match you with mentors.
+            </p>
+            <button className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-6 py-2.5 rounded-xl transition-colors cursor-pointer" onClick={() => onNavigate("menteeRequirements")}>
+              Complete Profile
+            </button>
+          </div>)}
+
+        {/* Filtered Empty state */}
+        {!loading && !error && mentors.length > 0 && filteredAndSortedMentors.length === 0 && (
+          <div className="bg-white rounded-2xl p-12 border border-slate-100 shadow-sm text-center">
+            <div className="text-4xl mb-4">🔍</div>
+            <h3 className="font-bold text-slate-700 text-lg mb-2">No mentors match your filters</h3>
+            <p className="text-slate-400 text-sm mb-5">
+              Try adjusting or resetting your filter criteria to see more recommendations.
+            </p>
+            <button
+              className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-6 py-2.5 rounded-xl transition-colors cursor-pointer"
+              onClick={() => {
+                setSelectedSkill("");
+                setSelectedMentorType("");
+                setSelectedExperience("");
+                setSelectedRating("");
+                setSortBy("Best Match");
+              }}
+            >
+              Reset Filters
+            </button>
+          </div>
+        )}
+
+        {/* Results */}
+        {!loading && !error && filteredAndSortedMentors.length > 0 && (<div className="space-y-4">
+          {filteredAndSortedMentors.map((m, i) => {
+            const overall = toPercent(m.scores?.overall);
+            const semantic = toPercent(m.scores?.semantic_similarity);
+            const goal = toPercent(m.scores?.goal_match);
+            const ratingScore = m.scores?.rating;
+            const hasRating = typeof ratingScore === "number" && ratingScore > 0;
+            const ratingOutOfFive = hasRating ? (ratingScore * 5).toFixed(1) : null;
+            const hasSlots = (m.scores?.availability || 0) > 0;
+
+            return (<div key={m.mentor_id} className="bg-white rounded-2xl border border-[#E5E7EB] shadow-xs hover:border-[#4F46E5]/40 transition-all overflow-hidden">
               <div className="p-5">
                 <div className="flex items-start gap-4">
                   <div className="relative flex-shrink-0">
-                    <div className={`w-14 h-14 ${m.bg} rounded-2xl flex items-center justify-center text-white font-bold text-lg`}>{m.avatar}</div>
-                    {i === 0 && (<div className="absolute -top-1.5 -right-1.5 bg-amber-400 text-white text-xs font-bold px-1.5 py-0.5 rounded-full">★1</div>)}
+                    <div className="w-14 h-14 bg-[#4F46E5] rounded-full flex items-center justify-center text-white font-bold text-lg shadow-xs">
+                      {getInitials(m.name)}
+                    </div>
+                    {i === 0 && (<div className="absolute -top-1 -right-1 bg-amber-400 text-white text-xs font-bold px-1.5 py-0.5 rounded-full shadow-xs">★1</div>)}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start flex-wrap gap-2 mb-1">
-                      <h3 className="font-bold text-slate-900 text-lg">{m.name}</h3>
-                      <div className="flex items-center gap-1">
-                        <span className="bg-emerald-100 text-emerald-700 text-xs font-bold px-2 py-0.5 rounded-full">✓ Verified</span>
-                        <span className="text-slate-400 text-xs">· {m.org}</span>
+                      <h3 className="font-bold text-[#172033] text-lg">{m.name || "Mentor"}</h3>
+                      <div className="flex items-center gap-1.5">
+                        {m.verified && (<span className="bg-emerald-50 text-emerald-700 border border-emerald-200/60 text-xs font-semibold px-2.5 py-0.5 rounded-full">✓ Verified</span>)}
+                        {m.organization && (<span className="text-[#718096] text-xs">· {m.organization}</span>)}
                       </div>
                     </div>
-                    <p className="text-indigo-600 text-sm font-semibold mb-2">{m.type}</p>
-                    <div className="flex flex-wrap gap-1.5 mb-3">
-                      {m.skills.map(s => <span key={s} className="bg-slate-100 text-slate-600 text-xs px-2.5 py-1 rounded-full">{s}</span>)}
-                    </div>
-                    <div className="flex flex-wrap items-center gap-4 text-sm text-slate-600">
-                      <span>⭐ <strong>{m.rating}</strong></span>
-                      <span>🗓 {m.sessions} sessions</span>
-                      <span>💼 {m.exp}</span>
-                      <span>📍 {m.availability}</span>
+                    {m.mentor_type && (<p className="text-[#4F46E5] text-sm font-semibold mb-2">{m.mentor_type}</p>)}
+                    {m.skills.length > 0 && (<div className="flex flex-wrap gap-1.5 mb-3">
+                      {m.skills.map(s => <span key={s} className="bg-[#EEF0FF] text-[#4F46E5] border border-[#EEF0FF] text-xs font-semibold px-2.5 py-1 rounded-full">{s}</span>)}
+                    </div>)}
+                    <div className="flex flex-wrap items-center gap-4 text-sm text-[#718096]">
+                      <span>⭐ <strong className="text-[#172033]">{ratingOutOfFive || "Not rated yet"}</strong></span>
+                      {m.experience !== null && (<span>💼 <strong className="text-[#172033]">{m.experience}</strong> yrs</span>)}
+                      <span>📍 {hasSlots ? "Slots published" : "No slots published"}</span>
                     </div>
                   </div>
-                  <div className="flex-shrink-0 text-center">
-                    <div className="w-20 h-20 rounded-full border-4 border-indigo-100 flex items-center justify-center bg-indigo-50 mb-2">
+                  {overall !== null && (<div className="flex-shrink-0 text-center">
+                    <div className="w-18 h-18 rounded-full border-4 border-[#EEF0FF] flex items-center justify-center bg-[#EEF0FF]/40 mb-2">
                       <div>
-                        <div className="text-2xl font-bold text-indigo-700">{m.match}%</div>
-                        <div className="text-xs text-indigo-500 font-medium">Match</div>
+                        <div className="text-xl font-bold text-[#4F46E5]">{overall}%</div>
+                        <div className="text-[10px] text-[#4F46E5] font-semibold uppercase tracking-wider">Match</div>
                       </div>
                     </div>
-                  </div>
+                  </div>)}
                 </div>
 
                 {/* Score Breakdown */}
-                <div className="mt-4 bg-slate-50 rounded-xl p-4 grid grid-cols-2 md:grid-cols-5 gap-3">
+                <div className="mt-4 bg-[#F5F7FC] rounded-xl p-4 grid grid-cols-2 md:grid-cols-5 gap-3 border border-[#E5E7EB]">
                   {[
-                { label: "Skill Match", val: `${m.skillMatch}%`, icon: "🎯" },
-                { label: "Goal Match", val: `${m.goalMatch}%`, icon: "🏆" },
-                { label: "Experience", val: "Excellent", icon: "💼" },
-                { label: "Availability", val: "Matches", icon: "🗓" },
-                { label: "Rating", val: `${m.rating} ⭐`, icon: "⭐" },
+                { label: "Semantic Match", val: semantic !== null ? `${semantic}%` : "—", icon: "🔗" },
+                { label: "Goal Match", val: goal !== null ? `${goal}%` : "—", icon: "🏆" },
+                { label: "Experience", val: m.experience !== null ? `${m.experience} yrs` : "—", icon: "💼" },
+                { label: "Availability", val: hasSlots ? "Published" : "None", icon: "🗓" },
+                { label: "Rating", val: ratingOutOfFive ? `${ratingOutOfFive} ⭐` : "—", icon: "⭐" },
             ].map(sc => (<div key={sc.label} className="text-center">
                       <div className="text-base mb-0.5">{sc.icon}</div>
-                      <div className="font-bold text-slate-800 text-sm">{sc.val}</div>
-                      <div className="text-slate-500 text-xs">{sc.label}</div>
+                      <div className="font-bold text-[#172033] text-sm">{sc.val}</div>
+                      <div className="text-[#718096] text-xs">{sc.label}</div>
                     </div>))}
                 </div>
 
-                {/* Workload */}
-                <div className="mt-3 flex items-center gap-3">
-                  <span className="text-xs text-slate-500">Current workload:</span>
-                  <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                    <div className={`h-full rounded-full ${m.workload < 50 ? "bg-emerald-400" : m.workload < 70 ? "bg-amber-400" : "bg-red-400"}`} style={{ width: `${m.workload}%` }}/>
-                  </div>
-                  <span className={`text-xs font-bold ${m.workload < 50 ? "text-emerald-600" : m.workload < 70 ? "text-amber-600" : "text-red-600"}`}>{m.workload}%</span>
-                </div>
-
                 {/* Why this mentor */}
-                <button className="mt-3 text-sm text-indigo-600 hover:text-indigo-700 font-medium flex items-center gap-1" onClick={() => setExpandedWhy(expandedWhy === i ? null : i)}>
+                <button className="mt-3 text-sm text-[#4F46E5] hover:text-[#4338CA] font-medium flex items-center gap-1 cursor-pointer" onClick={() => setExpandedWhy(expandedWhy === i ? null : i)}>
                   {expandedWhy === i ? "▼" : "▶"} Why this mentor?
                 </button>
-                {expandedWhy === i && (<div className="mt-2 bg-indigo-50 border border-indigo-100 rounded-xl p-3 text-sm text-indigo-800">
-                    {m.why}
+                {expandedWhy === i && (<div className="mt-2 bg-[#EEF0FF] border border-[#EEF0FF] rounded-xl p-3 text-sm text-[#172033] space-y-2">
+                    <p>
+                       This mentor scored <strong className="text-[#4F46E5]">{overall}%</strong> overall. The score combines
+                      semantic similarity between your profile and the mentor&apos;s profile with
+                      goal overlap, experience, rating and availability.
+                    </p>
+                    <ul className="list-disc pl-5 space-y-0.5 text-xs text-[#718096]">
+                      <li>Semantic similarity: {semantic !== null ? `${semantic}%` : "unavailable"}</li>
+                      <li>Goal / skill overlap: {goal !== null ? `${goal}%` : "unavailable"}</li>
+                      <li>Experience: {m.experience !== null ? `${m.experience} years` : "not listed"}</li>
+                      <li>Rating: {ratingOutOfFive ? `${ratingOutOfFive} / 5` : "no reviews yet"}</li>
+                      <li>Availability: {hasSlots ? "slots published" : "no slots published"}</li>
+                    </ul>
+                    {m.bio && (<p className="pt-2 border-t border-[#4F46E5]/10 text-xs text-[#172033]/80">{m.bio}</p>)}
                   </div>)}
               </div>
 
               <div className="px-5 pb-5 flex gap-3">
-                <button className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-2.5 rounded-xl text-sm transition-colors" onClick={() => onNavigate("mentorProfile")}>
+                <button
+                  className="flex-1 bg-white hover:bg-[#F5F7FC] text-[#172033] font-semibold py-2.5 rounded-xl text-sm transition-colors border border-[#E5E7EB] cursor-pointer"
+                  onClick={() => {
+                    if (overall !== null) {
+                      sessionStorage.setItem(`ss_rec_score_${m.mentor_id}`, overall);
+                    }
+                    onNavigate("mentorProfile", {
+                      mentorId: m.mentor_id,
+                      fromPage: "aiRecs",
+                      matchScore: overall
+                    });
+                  }}
+                >
                   View Profile
                 </button>
-                <button className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors shadow-sm" onClick={() => onNavigate("booking")}>
+                <button className="flex-1 bg-[#4F46E5] hover:bg-[#4338CA] text-white font-semibold py-2.5 rounded-xl text-sm transition-colors shadow-xs cursor-pointer" onClick={() => onNavigate("booking", { mentorId: m.mentor_id })}>
                   Book Session
                 </button>
               </div>
-            </div>))}
-        </div>
+            </div>);
+          })}
+        </div>)}
       </div>
     </div>);
 }
