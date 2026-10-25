@@ -6,5 +6,6 @@ dist/
 .DS_Store
 venv/
 backend/.env
+ai/aiml/api/.env
 __pycache__/
 *.pyc
