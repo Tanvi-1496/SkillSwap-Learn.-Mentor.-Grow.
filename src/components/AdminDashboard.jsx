@@ -167,8 +167,9 @@ export default function AdminDashboard({ onNavigate }) {
         try {
             let url = "http://localhost:5000/admin/mentors";
             const params = new URLSearchParams();
-            if (mentorVerifFilter === "verified") params.append("verified", "true");
-            if (mentorVerifFilter === "unverified") params.append("verified", "false");
+            if (mentorVerifFilter && mentorVerifFilter !== "all") {
+                params.append("status", mentorVerifFilter);
+            }
             if (params.toString()) url += `?${params.toString()}`;
 
             const res = await fetch(url, {
@@ -229,27 +230,53 @@ export default function AdminDashboard({ onNavigate }) {
         }
     }, [activeNav, authStatus, sessionToken, fetchStats, fetchUsers, fetchMentors, fetchBookings]);
 
-    // Mentor verification handler
-    const handleVerifyMentor = async (mentorUserId, verifiedStatus, mentorName) => {
+    // Mentor verification handler (accepts 'approved', 'rejected', or boolean)
+    const handleVerifyMentor = async (mentorUserId, actionOrStatus, mentorName) => {
         if (!sessionToken) return;
         setActionLoadingId(mentorUserId);
         try {
+            let targetStatus;
+            if (typeof actionOrStatus === "string") {
+                targetStatus = actionOrStatus;
+            } else if (typeof actionOrStatus === "boolean") {
+                targetStatus = actionOrStatus ? "approved" : "rejected";
+            } else {
+                targetStatus = "approved";
+            }
+
             const res = await fetch(`http://localhost:5000/admin/mentors/${mentorUserId}/verify`, {
                 method: "PATCH",
                 headers: {
                     "Content-Type": "application/json",
                     Authorization: `Bearer ${sessionToken}`
                 },
-                body: JSON.stringify({ verified: verifiedStatus })
+                body: JSON.stringify({ status: targetStatus })
             });
 
             const data = await res.json();
             if (res.ok) {
+                const actionWord = targetStatus === "approved"
+                    ? "approved and verified"
+                    : targetStatus === "rejected"
+                        ? "rejected"
+                        : "set to pending";
                 showFeedback(
-                    `Mentor ${mentorName || "profile"} successfully ${verifiedStatus ? "approved and verified" : "set to unverified"}.`,
+                    `Mentor ${mentorName || "profile"} successfully ${actionWord}.`,
                     "success"
                 );
-                // Refresh mentor list and stats
+                // Immediately remove from pending queue / update local status
+                setMentors((prev) =>
+                    prev.map((m) =>
+                        m.user_id === mentorUserId
+                            ? {
+                                ...m,
+                                verification_status: targetStatus,
+                                verified: targetStatus === "approved"
+                            }
+                            : m
+                    )
+                );
+                // Refresh mentor list and stats from database
                 fetchMentors();
                 fetchStats();
             } else {
@@ -376,7 +403,7 @@ export default function AdminDashboard({ onNavigate }) {
     // ---------------------------------------------------------------------------
     // RENDER: Full Authorized Admin Dashboard
     // ---------------------------------------------------------------------------
-    const pendingMentorsList = mentors.filter((m) => !m.verified);
+    const pendingMentorsList = mentors.filter((m) => m.verification_status === "pending" || (!m.verification_status && !m.verified));
     const pendingCount = stats?.pendingMentors ?? pendingMentorsList.length;
 
     return (
@@ -403,11 +430,10 @@ export default function AdminDashboard({ onNavigate }) {
                         return (
                             <button
                                 key={item.id}
-                                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                                    isActive
+                                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${isActive
                                         ? "bg-[#4F46E5] text-white shadow-xs"
                                         : "text-[#718096] hover:bg-[#F5F7FC] hover:text-[#172033]"
-                                }`}
+                                    }`}
                                 onClick={() => setActiveNav(item.id)}
                             >
                                 <span className="text-base">{item.icon}</span>
@@ -477,11 +503,10 @@ export default function AdminDashboard({ onNavigate }) {
                 {/* Banner Notifications */}
                 {feedbackMessage && (
                     <div
-                        className={`mx-6 mt-4 p-3.5 rounded-xl border flex items-center justify-between transition-all ${
-                            feedbackMessage.type === "success"
+                        className={`mx-6 mt-4 p-3.5 rounded-xl border flex items-center justify-between transition-all ${feedbackMessage.type === "success"
                                 ? "bg-emerald-50 border-emerald-200 text-emerald-800"
                                 : "bg-rose-50 border-rose-200 text-rose-800"
-                        }`}
+                            }`}
                     >
                         <div className="flex items-center gap-2 text-sm font-medium">
                             <span>{feedbackMessage.type === "success" ? "✓" : "⚠"}</span>
@@ -734,8 +759,8 @@ export default function AdminDashboard({ onNavigate }) {
                                                         u.role === "admin"
                                                             ? "bg-amber-100 text-amber-800 border-amber-200"
                                                             : u.role === "mentor"
-                                                            ? "bg-violet-100 text-violet-800 border-violet-200"
-                                                            : "bg-blue-100 text-blue-800 border-blue-200";
+                                                                ? "bg-violet-100 text-violet-800 border-violet-200"
+                                                                : "bg-blue-100 text-blue-800 border-blue-200";
 
                                                     return (
                                                         <tr key={u.id} className="hover:bg-slate-50 transition-colors">
@@ -807,8 +832,9 @@ export default function AdminDashboard({ onNavigate }) {
                                         className="bg-white border border-slate-200 rounded-xl px-3.5 py-2 text-sm focus:outline-none focus:border-indigo-500 shadow-sm"
                                     >
                                         <option value="all">All Verification Statuses</option>
-                                        <option value="verified">Verified Only</option>
-                                        <option value="unverified">Unverified Only</option>
+                                        <option value="approved">Approved Only</option>
+                                        <option value="pending">Pending Only</option>
+                                        <option value="rejected">Rejected Only</option>
                                     </select>
                                     <button
                                         onClick={fetchMentors}
@@ -908,38 +934,57 @@ export default function AdminDashboard({ onNavigate }) {
                                                                 </div>
                                                             </td>
                                                             <td className="px-5 py-4">
-                                                                {m.verified ? (
+                                                                {m.verification_status === "approved" || (!m.verification_status && m.verified) ? (
                                                                     <span className="bg-emerald-100 text-emerald-700 border border-emerald-200 text-xs font-bold px-2.5 py-1 rounded-full inline-flex items-center gap-1">
-                                                                        ✓ Verified
+                                                                        ✓ Approved
+                                                                    </span>
+                                                                ) : m.verification_status === "rejected" ? (
+                                                                    <span className="bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold px-2.5 py-1 rounded-full inline-flex items-center gap-1">
+                                                                        ✕ Rejected
                                                                     </span>
                                                                 ) : (
                                                                     <span className="bg-amber-100 text-amber-700 border border-amber-200 text-xs font-bold px-2.5 py-1 rounded-full inline-flex items-center gap-1">
-                                                                        ⏳ Unverified
+                                                                        ⏳ Pending Review
                                                                     </span>
                                                                 )}
                                                             </td>
                                                             <td className="px-5 py-4 text-right">
-                                                                {m.verified ? (
-                                                                    <button
-                                                                        disabled={actionLoadingId === m.user_id}
-                                                                        onClick={() =>
-                                                                            handleVerifyMentor(m.user_id, false, m.name)
-                                                                        }
-                                                                        className="bg-rose-50 hover:bg-rose-100 text-rose-700 font-semibold px-3 py-1.5 rounded-lg text-xs transition-colors disabled:opacity-50"
-                                                                    >
-                                                                        {actionLoadingId === m.user_id ? "Saving..." : "Revoke / Unverify"}
-                                                                    </button>
-                                                                ) : (
-                                                                    <button
-                                                                        disabled={actionLoadingId === m.user_id}
-                                                                        onClick={() =>
-                                                                            handleVerifyMentor(m.user_id, true, m.name)
-                                                                        }
-                                                                        className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-semibold px-3 py-1.5 rounded-lg text-xs transition-colors disabled:opacity-50"
-                                                                    >
-                                                                        {actionLoadingId === m.user_id ? "Saving..." : "✓ Approve Verification"}
-                                                                    </button>
-                                                                )}
+                                                                <div className="flex justify-end gap-1.5">
+                                                                    {m.verification_status === "approved" || (!m.verification_status && m.verified) ? (
+                                                                        <button
+                                                                            disabled={actionLoadingId === m.user_id}
+                                                                            onClick={() =>
+                                                                                handleVerifyMentor(m.user_id, "rejected", m.name)
+                                                                            }
+                                                                            className="bg-rose-50 hover:bg-rose-100 text-rose-700 font-semibold px-2.5 py-1 rounded-lg text-xs transition-colors disabled:opacity-50 cursor-pointer"
+                                                                        >
+                                                                            {actionLoadingId === m.user_id ? "Saving..." : "Reject / Revoke"}
+                                                                        </button>
+                                                                    ) : (
+                                                                        <>
+                                                                            <button
+                                                                                disabled={actionLoadingId === m.user_id}
+                                                                                onClick={() =>
+                                                                                    handleVerifyMentor(m.user_id, "approved", m.name)
+                                                                                }
+                                                                                className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-semibold px-2.5 py-1 rounded-lg text-xs transition-colors disabled:opacity-50 cursor-pointer"
+                                                                            >
+                                                                                {actionLoadingId === m.user_id ? "Saving..." : "✓ Approve"}
+                                                                            </button>
+                                                                            {m.verification_status !== "rejected" && (
+                                                                                <button
+                                                                                    disabled={actionLoadingId === m.user_id}
+                                                                                    onClick={() =>
+                                                                                        handleVerifyMentor(m.user_id, "rejected", m.name)
+                                                                                    }
+                                                                                    className="bg-rose-50 hover:bg-rose-100 text-rose-700 font-semibold px-2.5 py-1 rounded-lg text-xs transition-colors disabled:opacity-50 cursor-pointer"
+                                                                                >
+                                                                                    {actionLoadingId === m.user_id ? "Saving..." : "✕ Reject"}
+                                                                                </button>
+                                                                            )}
+                                                                        </>
+                                                                    )}
+                                                                </div>
                                                             </td>
                                                         </tr>
                                                     ))}
@@ -1061,7 +1106,7 @@ export default function AdminDashboard({ onNavigate }) {
                                                                     disabled={actionLoadingId === v.user_id}
                                                                     className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-semibold px-3 py-1.5 rounded-lg text-xs transition-colors disabled:opacity-50"
                                                                     onClick={() =>
-                                                                        handleVerifyMentor(v.user_id, true, v.name)
+                                                                        handleVerifyMentor(v.user_id, "approved", v.name)
                                                                     }
                                                                 >
                                                                     {actionLoadingId === v.user_id ? "Saving..." : "✓ Approve"}
@@ -1070,7 +1115,7 @@ export default function AdminDashboard({ onNavigate }) {
                                                                     disabled={actionLoadingId === v.user_id}
                                                                     className="bg-rose-50 hover:bg-rose-100 text-rose-700 font-semibold px-3 py-1.5 rounded-lg text-xs transition-colors disabled:opacity-50"
                                                                     onClick={() =>
-                                                                        handleVerifyMentor(v.user_id, false, v.name)
+                                                                        handleVerifyMentor(v.user_id, "rejected", v.name)
                                                                     }
                                                                 >
                                                                     {actionLoadingId === v.user_id ? "Saving..." : "✕ Reject"}
@@ -1156,10 +1201,10 @@ export default function AdminDashboard({ onNavigate }) {
                                                         b.status === "confirmed"
                                                             ? "bg-emerald-100 text-emerald-800 border-emerald-200"
                                                             : b.status === "completed"
-                                                            ? "bg-blue-100 text-blue-800 border-blue-200"
-                                                            : b.status === "pending"
-                                                            ? "bg-amber-100 text-amber-800 border-amber-200"
-                                                            : "bg-rose-100 text-rose-800 border-rose-200";
+                                                                ? "bg-blue-100 text-blue-800 border-blue-200"
+                                                                : b.status === "pending"
+                                                                    ? "bg-amber-100 text-amber-800 border-amber-200"
+                                                                    : "bg-rose-100 text-rose-800 border-rose-200";
 
                                                     return (
                                                         <tr key={b.id} className="hover:bg-slate-50 transition-colors">

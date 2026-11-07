@@ -47,7 +47,7 @@ const adminMiddleware = async (req, res, next) => {
         }
 
         // 3. Strict verification: role must strictly equal 'admin'
-        if (!userProfile || userProfile.role !== "admin") {
+        if (!userProfile || typeof userProfile.role !== "string" || userProfile.role.toLowerCase() !== "admin") {
             return res.status(403).json({
                 error: "Access denied. Admin role required."
             });
@@ -56,7 +56,8 @@ const adminMiddleware = async (req, res, next) => {
         // 4. Attach verified admin user record to request
         req.user = {
             ...data.user,
-            ...userProfile
+            ...userProfile,
+            role: "admin"
         };
 
         next();

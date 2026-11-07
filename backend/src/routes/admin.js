@@ -15,9 +15,7 @@ router.get("/stats", async (req, res) => {
     try {
         const [
             { count: totalStudents, error: errStudents },
-            { count: totalMentors, error: errMentors },
-            { count: verifiedMentors, error: errVerMentors },
-            { count: pendingMentors, error: errPendMentors },
+            { data: allMentors, error: errMentors },
             { count: totalBookings, error: errBookings },
             { count: pendingBookings, error: errPendBookings },
             { count: confirmedBookings, error: errConfBookings },
@@ -25,9 +23,7 @@ router.get("/stats", async (req, res) => {
             { count: cancelledBookings, error: errCancBookings }
         ] = await Promise.all([
             supabase.from("users").select("*", { count: "exact", head: true }).eq("role", "student"),
-            supabase.from("mentor_profiles").select("*", { count: "exact", head: true }),
-            supabase.from("mentor_profiles").select("*", { count: "exact", head: true }).eq("verified", true),
-            supabase.from("mentor_profiles").select("*", { count: "exact", head: true }).or("verified.is.null,verified.eq.false"),
+            supabase.from("mentor_profiles").select("*"),
             supabase.from("bookings").select("*", { count: "exact", head: true }),
             supabase.from("bookings").select("*", { count: "exact", head: true }).eq("status", "pending"),
             supabase.from("bookings").select("*", { count: "exact", head: true }).eq("status", "confirmed"),
@@ -35,35 +31,40 @@ router.get("/stats", async (req, res) => {
             supabase.from("bookings").select("*", { count: "exact", head: true }).in("status", ["cancelled", "declined"])
         ]);
 
-        if (errStudents || errMentors || errVerMentors || errPendMentors || errBookings) {
+        if (errStudents || errMentors || errBookings) {
             console.error("Error aggregating admin stats:", {
                 errStudents,
                 errMentors,
-                errVerMentors,
-                errPendMentors,
                 errBookings
             });
             return res.status(500).json({ error: "Failed to calculate platform statistics" });
         }
 
-        // Aggregate actual skills distribution from mentor_profiles
-        const { data: mentorSkillsData, error: skillsError } = await supabase
-            .from("mentor_profiles")
-            .select("skills");
-
+        // Aggregate mentor verification statuses and skills distribution
+        let verifiedMentors = 0;
+        let pendingMentors = 0;
+        let rejectedMentors = 0;
         const skillCounts = {};
-        if (mentorSkillsData && !skillsError) {
-            mentorSkillsData.forEach((m) => {
-                if (Array.isArray(m.skills)) {
-                    m.skills.forEach((skill) => {
-                        const trimmed = typeof skill === "string" ? skill.trim() : "";
-                        if (trimmed) {
-                            skillCounts[trimmed] = (skillCounts[trimmed] || 0) + 1;
-                        }
-                    });
-                }
-            });
-        }
+
+        (allMentors || []).forEach((m) => {
+            const status = m.verification_status || (m.verified ? "approved" : "pending");
+            if (status === "approved") {
+                verifiedMentors++;
+            } else if (status === "rejected") {
+                rejectedMentors++;
+            } else {
+                pendingMentors++;
+            }
+
+            if (Array.isArray(m.skills)) {
+                m.skills.forEach((skill) => {
+                    const trimmed = String(skill).trim();
+                    if (trimmed) {
+                        skillCounts[trimmed] = (skillCounts[trimmed] || 0) + 1;
+                    }
+                });
+            }
+        });
 
         const topSkills = Object.entries(skillCounts)
             .map(([skill, count]) => ({ skill, count }))
@@ -73,9 +74,10 @@ router.get("/stats", async (req, res) => {
         res.json({
             stats: {
                 totalStudents: totalStudents || 0,
-                totalMentors: totalMentors || 0,
-                verifiedMentors: verifiedMentors || 0,
-                pendingMentors: pendingMentors || 0,
+                totalMentors: (allMentors || []).length,
+                verifiedMentors,
+                pendingMentors,
+                rejectedMentors,
                 totalBookings: totalBookings || 0,
                 pendingBookings: pendingBookings || 0,
                 confirmedBookings: confirmedBookings || 0,
@@ -86,11 +88,10 @@ router.get("/stats", async (req, res) => {
         });
     } catch (error) {
         console.error("GET /admin/stats error:", error);
-        res.status(500).json({ error: "Internal server error fetching stats" });
+        res.status(500).json({ error: "Internal server error fetching admin stats" });
     }
 });
 
-// ---------------------------------------------------------------------------
 // PART 5: GET /admin/users
 // Display real users from public.users with search/role filters
 // ---------------------------------------------------------------------------
@@ -133,19 +134,12 @@ router.get("/users", async (req, res) => {
 // ---------------------------------------------------------------------------
 router.get("/mentors", async (req, res) => {
     try {
-        const { verified } = req.query;
+        const { verified, status } = req.query;
 
-        let query = supabase
+        // Use select("*") so it succeeds whether verification_status is already deployed or pending
+        let { data: mentors, error } = await supabase
             .from("mentor_profiles")
-            .select("user_id, mentor_type, skills, experience, bio, org, verified");
-
-        if (verified === "true") {
-            query = query.eq("verified", true);
-        } else if (verified === "false") {
-            query = query.or("verified.is.null,verified.eq.false");
-        }
-
-        const { data: mentors, error } = await query;
+            .select("*");
 
         if (error) {
             console.error("GET /admin/mentors error:", error);
@@ -156,7 +150,7 @@ router.get("/mentors", async (req, res) => {
             return res.json({ mentors: [] });
         }
 
-        // Fetch corresponding user details from public.users table
+        // Enrich with user names from public.users table
         const userIds = mentors.map((m) => m.user_id).filter(Boolean);
         const { data: usersData, error: usersError } = await supabase
             .from("users")
@@ -169,10 +163,13 @@ router.get("/mentors", async (req, res) => {
 
         const usersMap = new Map((usersData || []).map((u) => [u.id, u]));
 
-        const enrichedMentors = mentors.map((m) => {
+        let enrichedMentors = mentors.map((m) => {
             const user = usersMap.get(m.user_id);
+            const resolvedStatus = m.verification_status || (m.verified ? "approved" : "pending");
             return {
                 ...m,
+                verification_status: resolvedStatus,
+                verified: resolvedStatus === "approved",
                 name: user?.name || "Unknown Mentor",
                 email: user?.email || "",
                 phone: user?.phone || "",
@@ -181,6 +178,18 @@ router.get("/mentors", async (req, res) => {
             };
         });
 
+        // Filter by status or verified
+        if (status) {
+            const s = String(status).toLowerCase().trim();
+            if (["pending", "approved", "rejected"].includes(s)) {
+                enrichedMentors = enrichedMentors.filter((m) => m.verification_status === s);
+            }
+        } else if (verified === "true") {
+            enrichedMentors = enrichedMentors.filter((m) => m.verification_status === "approved");
+        } else if (verified === "false") {
+            enrichedMentors = enrichedMentors.filter((m) => m.verification_status === "pending");
+        }
+
         res.json({ mentors: enrichedMentors });
     } catch (error) {
         console.error("GET /admin/mentors error:", error);
@@ -188,18 +197,28 @@ router.get("/mentors", async (req, res) => {
     }
 });
 
-// ---------------------------------------------------------------------------
 // PART 7: PATCH /admin/mentors/:id/verify
 // Approve or reject mentor verification status
 // ---------------------------------------------------------------------------
 router.patch("/mentors/:id/verify", async (req, res) => {
     try {
         const { id } = req.params;
-        const { verified } = req.body;
+        const { verified, status } = req.body;
 
-        if (typeof verified !== "boolean") {
+        let targetStatus;
+        if (typeof status === "string") {
+            const s = status.toLowerCase().trim();
+            if (!["approved", "rejected", "pending"].includes(s)) {
+                return res.status(400).json({
+                    error: "Invalid status value. Must be 'approved', 'rejected', or 'pending'."
+                });
+            }
+            targetStatus = s;
+        } else if (typeof verified === "boolean") {
+            targetStatus = verified ? "approved" : "rejected";
+        } else {
             return res.status(400).json({
-                error: "Invalid verified value. Must be a boolean (true or false)."
+                error: "Missing or invalid verification status. Provide status ('approved' | 'rejected') or verified (boolean)."
             });
         }
 
@@ -220,12 +239,35 @@ router.patch("/mentors/:id/verify", async (req, res) => {
         }
 
         // Update verification status
-        const { data: updated, error: updateError } = await supabase
+        const isVerified = targetStatus === "approved";
+        let updated;
+        let updateError;
+
+        // Try updating both verification_status and verified
+        const resPrimary = await supabase
             .from("mentor_profiles")
-            .update({ verified })
+            .update({
+                verification_status: targetStatus,
+                verified: isVerified
+            })
             .eq("user_id", id)
-            .select("user_id, mentor_type, skills, experience, bio, org, verified")
+            .select("*")
             .single();
+
+        if (resPrimary.error && (resPrimary.error.code === "42703" || resPrimary.error.code === "PGRST204")) {
+            // Column does not exist yet (pre-migration) -> fallback to verified boolean
+            const resFallback = await supabase
+                .from("mentor_profiles")
+                .update({ verified: isVerified })
+                .eq("user_id", id)
+                .select("*")
+                .single();
+            updated = resFallback.data;
+            updateError = resFallback.error;
+        } else {
+            updated = resPrimary.data;
+            updateError = resPrimary.error;
+        }
 
         if (updateError) {
             console.error("Error updating mentor verification:", updateError);
@@ -233,8 +275,12 @@ router.patch("/mentors/:id/verify", async (req, res) => {
         }
 
         res.json({
-            message: `Mentor verification updated to ${verified ? "verified" : "unverified"}`,
-            mentor: updated
+            message: `Mentor verification updated to ${targetStatus}`,
+            mentor: {
+                ...updated,
+                verification_status: targetStatus,
+                verified: isVerified
+            }
         });
     } catch (error) {
         console.error("PATCH /admin/mentors/:id/verify error:", error);
@@ -242,7 +288,6 @@ router.patch("/mentors/:id/verify", async (req, res) => {
     }
 });
 
-// ---------------------------------------------------------------------------
 // PART 8: GET /admin/bookings
 // Display real platform-wide bookings enriched with users table
 // ---------------------------------------------------------------------------
