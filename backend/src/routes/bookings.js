@@ -8,6 +8,7 @@ import {
     estimateAudioDuration,
     MAX_AUDIO_DURATION_SECONDS
 } from "../services/gnaniService.js";
+import { moderateBookingTranscript } from "../services/moderationService.js";
 
 const router = express.Router();
 
@@ -936,6 +937,17 @@ router.post("/:id/audio", authMiddleware, handleAudioUploadMiddleware, async (re
                 .eq("id", id);
         }
 
+        // 13. Trigger AI Safety & Content Moderation Analysis
+        let moderationOutcome = null;
+        try {
+            moderationOutcome = await moderateBookingTranscript(id, sttResult.transcript, {
+                studentId: booking.student_id,
+                mentorId: booking.mentor_id
+            });
+        } catch (modErr) {
+            console.warn("[Moderation] Non-fatal background moderation warning:", modErr.message);
+        }
+
         return res.status(200).json({
             success: true,
             booking_id: id,
@@ -945,7 +957,12 @@ router.post("/:id/audio", authMiddleware, handleAudioUploadMiddleware, async (re
             audio_duration_seconds: effectiveDuration,
             reupload: isReupload,
             processing_time: sttResult.processingTime || null,
-            is_mock: !!sttResult.isMock
+            is_mock: !!sttResult.isMock,
+            safety_moderation: moderationOutcome ? {
+                is_safe: moderationOutcome.isSafe,
+                flags_count: moderationOutcome.flagsCount || 0,
+                pii_detected: !!moderationOutcome.piiDetected
+            } : null
         });
 
     } catch (error) {
@@ -1006,6 +1023,36 @@ router.get("/:id/transcript", authMiddleware, async (req, res) => {
             });
         }
 
+        // 4. Retrieve safety moderation status (if safety_flags table exists)
+        let safetyInfo = {
+            is_safe: true,
+            flags_count: 0,
+            has_pending: false,
+            flags: []
+        };
+
+        try {
+            const { data: safetyFlags, error: sfError } = await supabase
+                .from("safety_flags")
+                .select("id, category, severity, status, created_at")
+                .eq("booking_id", id);
+
+            if (!sfError && Array.isArray(safetyFlags) && safetyFlags.length > 0) {
+                safetyInfo = {
+                    is_safe: false,
+                    flags_count: safetyFlags.length,
+                    has_pending: safetyFlags.some((f) => f.status === "pending"),
+                    flags: isAdmin ? safetyFlags : safetyFlags.map((f) => ({
+                        category: f.category,
+                        severity: f.severity,
+                        status: f.status
+                    }))
+                };
+            }
+        } catch (sfErr) {
+            // Non-fatal if safety_flags table not yet migrated
+        }
+
         return res.json({
             success: transcript.status === "completed",
             booking_id: transcript.booking_id,
@@ -1016,6 +1063,7 @@ router.get("/:id/transcript", authMiddleware, async (req, res) => {
             student_consent: transcript.student_consent || false,
             mentor_consent: transcript.mentor_consent || false,
             consent_confirmed: transcript.consent_confirmed || false,
+            safety_moderation: safetyInfo,
             error_message: transcript.error_message || null,
             audio_filename: transcript.audio_filename || null,
             created_at: transcript.created_at || new Date().toISOString(),

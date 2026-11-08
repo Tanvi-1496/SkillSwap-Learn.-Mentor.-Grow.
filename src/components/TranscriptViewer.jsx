@@ -170,6 +170,17 @@ export default function TranscriptViewer({ bookingId, initialTranscript, onRefre
                             ⏱️ {transcriptData.audio_duration_seconds}s
                         </span>
                     )}
+                    {transcriptData.safety_moderation && (
+                        <span
+                            className={`text-xs font-semibold px-2.5 py-0.5 rounded-full flex items-center gap-1 ${
+                                transcriptData.safety_moderation.is_safe
+                                    ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                    : "bg-amber-50 text-amber-800 border border-amber-200"
+                            }`}
+                        >
+                            <span>{transcriptData.safety_moderation.is_safe ? "🛡️ Safety: Clean" : "⚠️ Safety: Flagged"}</span>
+                        </span>
+                    )}
                 </div>
 
                 <div className="flex items-center gap-2">
@@ -197,16 +208,53 @@ export default function TranscriptViewer({ bookingId, initialTranscript, onRefre
                 </p>
             </div>
 
-            {/* AI Safety Integration Readiness Notice */}
-            <div className="bg-indigo-50/50 rounded-xl p-3 border border-indigo-100/60 flex items-center justify-between text-xs text-indigo-700">
-                <div className="flex items-center gap-1.5">
-                    <span>🛡️</span>
-                    <span>Transcript stored securely & formatted for AI Safety review.</span>
+            {/* AI Safety & Moderation Status Banner */}
+            {transcriptData.safety_moderation ? (
+                <div
+                    className={`rounded-xl p-3 border flex items-center justify-between text-xs flex-wrap gap-2 ${
+                        transcriptData.safety_moderation.is_safe
+                            ? "bg-emerald-50/70 border-emerald-200 text-emerald-900"
+                            : "bg-amber-50/80 border-amber-200 text-amber-900"
+                    }`}
+                >
+                    <div className="flex items-center gap-2">
+                        <span className="text-base">
+                            {transcriptData.safety_moderation.is_safe ? "🛡️" : "⚠️"}
+                        </span>
+                        <div>
+                            <span className="font-bold">
+                                {transcriptData.safety_moderation.is_safe
+                                    ? "AI Safety Verified"
+                                    : "Safety Review Flagged"}
+                            </span>
+                            <span className="text-slate-600 ml-1.5 font-normal">
+                                {transcriptData.safety_moderation.is_safe
+                                    ? "No policy violations or inappropriate content detected."
+                                    : `${transcriptData.safety_moderation.flags_count} item(s) flagged for human admin review.`}
+                            </span>
+                        </div>
+                    </div>
+                    <span
+                        className={`text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full ${
+                            transcriptData.safety_moderation.is_safe
+                                ? "bg-emerald-100 text-emerald-700"
+                                : "bg-amber-100 text-amber-800"
+                        }`}
+                    >
+                        {transcriptData.safety_moderation.is_safe ? "Passed" : "Under Review"}
+                    </span>
                 </div>
-                <span className="text-[10px] uppercase font-bold text-indigo-500 tracking-wider">
-                    Tanvi AI Safety Contract Ready
-                </span>
-            </div>
+            ) : (
+                <div className="bg-slate-50 rounded-xl p-3 border border-slate-200 flex items-center justify-between text-xs text-slate-600">
+                    <div className="flex items-center gap-1.5">
+                        <span>🛡️</span>
+                        <span>AI Safety & Moderation Analysis Enabled</span>
+                    </div>
+                    <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">
+                        Active
+                    </span>
+                </div>
+            )}
         </div>
     );
 }
