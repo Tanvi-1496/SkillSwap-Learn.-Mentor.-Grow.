@@ -8,6 +8,7 @@ import recommendationRoutes from "./routes/recommendations.js";
 import bookingRoutes from "./routes/bookings.js";
 import adminRoutes from "./routes/admin.js";
 import reviewRoutes from "./routes/reviews.js";
+import moderationRoutes from "./routes/moderation.js";
 
 dotenv.config();
 
@@ -22,6 +23,7 @@ app.use("/recommendations", recommendationRoutes);
 app.use("/bookings", bookingRoutes);
 app.use("/admin", adminRoutes);
 app.use("/reviews", reviewRoutes);
+app.use("/moderation", moderationRoutes);
 
 app.get("/", (req, res) => {
     res.json({
@@ -46,7 +48,9 @@ app.use((err, req, res, next) => {
 
 const PORT = process.env.PORT || 5000;
 
-if (process.env.NODE_ENV !== "test") {
+const isTest = process.env.NODE_ENV === "test" || process.argv.some((arg) => arg.includes("test"));
+
+if (!isTest) {
     app.listen(PORT, () => {
         console.log(`Server running on http://localhost:${PORT}`);
     });
