@@ -1,6 +1,18 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabase";
 
+const LANGUAGE_LABELS = {
+    "en-IN": "English (India)",
+    "hi-IN": "Hindi",
+    "mr-IN": "Marathi",
+    "indic-auto": "Indic Auto-detected"
+};
+
+function formatLanguageName(code) {
+    if (!code) return "English (en-IN)";
+    return LANGUAGE_LABELS[code] ? `${LANGUAGE_LABELS[code]} (${code})` : code;
+}
+
 export default function TranscriptViewer({ bookingId, initialTranscript, onRefresh }) {
     const [transcriptData, setTranscriptData] = useState(initialTranscript || null);
     const [loading, setLoading] = useState(!initialTranscript);
@@ -163,7 +175,7 @@ export default function TranscriptViewer({ bookingId, initialTranscript, onRefre
                         ✓ Transcribed (Gnani.ai)
                     </span>
                     <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-slate-100 text-slate-700">
-                        🌐 {transcriptData.language || "en-IN"}
+                        🌐 {formatLanguageName(transcriptData.language || transcriptData.detected_language)}
                     </span>
                     {transcriptData.audio_duration_seconds && (
                         <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-slate-100 text-slate-700">

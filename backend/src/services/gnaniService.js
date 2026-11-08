@@ -6,9 +6,51 @@
 
 const GNANI_STT_ENDPOINT = process.env.GNANI_STT_ENDPOINT || "https://api.vachana.ai/stt/v3";
 const DEFAULT_MODEL = "prisma-v3.0";
-const DEFAULT_LANGUAGE = "indic-auto";
+export const DEFAULT_LANGUAGE = "indic-auto";
 const REQUEST_TIMEOUT_MS = 60000; // 60 seconds
 export const MAX_AUDIO_DURATION_SECONDS = 30.0; // Gnani REST STT 30-second ceiling
+
+export const SUPPORTED_LANGUAGES = [
+    { code: "indic-auto", name: "Auto-detect (Indic & English)", type: "auto" },
+    { code: "en-IN", name: "English (India)", type: "single" },
+    { code: "hi-IN", name: "Hindi", type: "single" },
+    { code: "mr-IN", name: "Marathi", type: "single" },
+    { code: "en-IN,hi-IN", name: "English + Hindi (Code-mixed)", type: "candidate_hints" },
+    { code: "en-IN,mr-IN", name: "English + Marathi (Code-mixed)", type: "candidate_hints" }
+];
+
+/**
+ * Resolves the final detected language string.
+ * Ensures candidate hints (comma-separated lists like "en-IN,hi-IN") never become
+ * the stored detected language.
+ *
+ * @param {string|null} detectedCode - Language code returned by Gnani API
+ * @param {string} requestedCode - Language code requested by caller
+ * @returns {string} Clean single BCP-47 language code (e.g. "en-IN", "hi-IN", "mr-IN")
+ */
+export function resolveDetectedLanguage(detectedCode, requestedCode = DEFAULT_LANGUAGE) {
+    if (detectedCode && typeof detectedCode === "string" && detectedCode.trim()) {
+        const cleaned = detectedCode.trim();
+        if (!cleaned.includes(",")) {
+            return cleaned;
+        }
+        return cleaned.split(",")[0].trim();
+    }
+
+    if (requestedCode && typeof requestedCode === "string") {
+        const cleaned = requestedCode.trim();
+        if (cleaned === "indic-auto") {
+            return "en-IN"; // Default fallback when auto-detect result is not provided
+        }
+        // If candidate hints like "en-IN,hi-IN", extract the primary candidate
+        if (cleaned.includes(",")) {
+            return cleaned.split(",")[0].trim() || "en-IN";
+        }
+        return cleaned;
+    }
+
+    return "en-IN";
+}
 
 /**
  * Validates audio format against documented Gnani input formats:
@@ -190,11 +232,14 @@ export async function transcribeAudio({
                 console.warn(
                     "[GnaniService] Notice: Running in simulated test mode (NODE_ENV=test or GNANI_MOCK=true)."
                 );
+                const simulatedDetectedLanguage = resolveDetectedLanguage(null, languageCode);
                 return {
                     success: true,
                     transcript:
                         "Hello, welcome to our SkillSwap mentorship session. Today we reviewed full-stack React components, database index optimizations, and API design principles. Next session will focus on live deployment and security audits.",
-                    language: languageCode === "indic-auto" ? "en-IN" : languageCode,
+                    language: simulatedDetectedLanguage,
+                    detectedLanguage: simulatedDetectedLanguage,
+                    requestedLanguage: languageCode || DEFAULT_LANGUAGE,
                     duration: effectiveDuration || 15.0,
                     processingTime: 0.42,
                     isMock: true
@@ -266,10 +311,18 @@ export async function transcribeAudio({
                     };
                 }
 
+                const resolvedLanguage = resolveDetectedLanguage(
+                    responseData.detected_language_code,
+                    languageCode
+                );
+
                 return {
                     success: true,
                     transcript: transcriptText,
-                    language: responseData.detected_language_code || languageCode || "en-IN",
+                    language: resolvedLanguage,
+                    detectedLanguage: resolvedLanguage,
+                    requestedLanguage: languageCode || DEFAULT_LANGUAGE,
+                    rawDetectedLanguage: responseData.detected_language_code || null,
                     duration: effectiveDuration,
                     processingTime: responseData.processing_time || null,
                     requestId: responseData.request_id || null,
@@ -297,5 +350,8 @@ export async function transcribeAudio({
             transcribeAudio,
             isSupportedAudioFormat,
             estimateAudioDuration,
+            resolveDetectedLanguage,
+            SUPPORTED_LANGUAGES,
+            DEFAULT_LANGUAGE,
             MAX_AUDIO_DURATION_SECONDS
         };

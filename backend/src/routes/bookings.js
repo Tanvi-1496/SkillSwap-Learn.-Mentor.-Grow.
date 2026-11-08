@@ -953,6 +953,8 @@ router.post("/:id/audio", authMiddleware, handleAudioUploadMiddleware, async (re
             booking_id: id,
             transcript_text: sttResult.transcript,
             language: sttResult.language || "en-IN",
+            detected_language: sttResult.detectedLanguage || sttResult.language || "en-IN",
+            requested_language: languageCode || "indic-auto",
             status: "completed",
             audio_duration_seconds: effectiveDuration,
             reupload: isReupload,
