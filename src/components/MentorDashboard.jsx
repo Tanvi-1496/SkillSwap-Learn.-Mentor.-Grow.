@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
+import SessionDetailsModal from "./SessionDetailsModal";
 
 const navItems = [
     { id: "dashboard", label: "Dashboard", icon: "🏠" },
@@ -169,6 +170,8 @@ export default function MentorDashboard({ onNavigate, initialTab }) {
     const [availFeedback, setAvailFeedback] = useState(null);
     const [bookingFeedback, setBookingFeedback] = useState(null);
     const [mentorReviews, setMentorReviews] = useState([]);
+    const [selectedSessionForModal, setSelectedSessionForModal] = useState(null);
+    const [currentMentorUser, setCurrentMentorUser] = useState(null);
 
     const loadMentorData = async () => {
         try {
@@ -871,6 +874,15 @@ export default function MentorDashboard({ onNavigate, initialTab }) {
                                                 <div className="bg-indigo-50 rounded-xl px-3 py-2 text-sm text-indigo-700 font-medium mt-3">
                                                     📌 {s.topic}
                                                 </div>
+                                                <div className="mt-3 flex gap-2">
+                                                    <button
+                                                        onClick={() => setSelectedSessionForModal(s)}
+                                                        className="text-xs font-semibold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/60 px-3.5 py-1.5 rounded-xl transition-colors cursor-pointer flex items-center gap-1.5"
+                                                    >
+                                                        <span>🎙️</span>
+                                                        <span>Audio & Transcript</span>
+                                                    </button>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -904,6 +916,15 @@ export default function MentorDashboard({ onNavigate, initialTab }) {
                                                 </div>
                                                 <div className="bg-slate-50 rounded-xl px-3 py-2 text-sm text-slate-700 font-medium mt-3">
                                                     📌 {s.topic}
+                                                </div>
+                                                <div className="mt-3 flex gap-2">
+                                                    <button
+                                                        onClick={() => setSelectedSessionForModal(s)}
+                                                        className="text-xs font-semibold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/60 px-3.5 py-1.5 rounded-xl transition-colors cursor-pointer flex items-center gap-1.5"
+                                                    >
+                                                        <span>🎙️</span>
+                                                        <span>Audio & Transcript</span>
+                                                    </button>
                                                 </div>
                                             </div>
                                         </div>
@@ -1289,5 +1310,13 @@ export default function MentorDashboard({ onNavigate, initialTab }) {
           )}
         </div>
       </main>
-    </div>);
+        {selectedSessionForModal && (
+                <SessionDetailsModal
+                    booking={selectedSessionForModal}
+                    currentUser={currentMentorUser}
+                    onClose={() => setSelectedSessionForModal(null)}
+                    onBookingUpdated={loadBookings}
+                />
+            )}
+        </div>);
 }

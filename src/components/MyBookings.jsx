@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
+import SessionDetailsModal from "./SessionDetailsModal";
 
 function formatTimeDisplay(timeStr) {
     if (!timeStr) return "";
@@ -33,6 +34,8 @@ export default function MyBookings({ onNavigate }) {
     const [confirmModal, setConfirmModal] = useState(null);
     const [actionFeedback, setActionFeedback] = useState(null);
     const [userRole, setUserRole] = useState("student");
+    const [selectedSessionForModal, setSelectedSessionForModal] = useState(null);
+    const [currentAuthUser, setCurrentAuthUser] = useState(null);
 
     const loadBookings = async () => {
         try {
@@ -44,6 +47,7 @@ export default function MyBookings({ onNavigate }) {
                 error: sessionError
             } = await supabase.auth.getSession();
 
+            setCurrentAuthUser(session?.user || null);
             if (sessionError || !session?.access_token) {
                 setError("Please log in to view your bookings.");
                 setLoading(false);
@@ -404,6 +408,15 @@ export default function MyBookings({ onNavigate }) {
                                                 Cancel Session
                                             </button>
                                         )}
+                                        {(b.status === "confirmed" || b.status === "completed") && (
+                                            <button
+                                                onClick={() => setSelectedSessionForModal(b)}
+                                                className="text-xs font-semibold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/60 px-3.5 py-1.5 rounded-xl transition-colors cursor-pointer flex items-center gap-1.5"
+                                            >
+                                                <span>🎙️</span>
+                                                <span>Audio & Transcript</span>
+                                            </button>
+                                        )}
                                         {tab === "Completed" && (
                                             <button
                                                 onClick={() => onNavigate("feedback")}
@@ -459,6 +472,14 @@ export default function MyBookings({ onNavigate }) {
                         </div>
                     </div>
                 </div>
+            )}
+            {selectedSessionForModal && (
+                <SessionDetailsModal
+                    booking={selectedSessionForModal}
+                    currentUser={currentAuthUser}
+                    onClose={() => setSelectedSessionForModal(null)}
+                    onBookingUpdated={loadBookings}
+                />
             )}
         </div>
     );
