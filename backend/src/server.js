@@ -4,6 +4,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import profileRoutes from "./routes/profile.js";
 import mentorRoutes from "./routes/mentor.js";
+import moderationRoutes from "./routes/moderation.js";
 
 dotenv.config();
 
@@ -14,6 +15,7 @@ app.use(express.json());
 app.use("/auth", authRoutes);
 app.use("/profile", profileRoutes);
 app.use("/mentors", mentorRoutes);
+app.use("/moderation", moderationRoutes);
 
 app.get("/", (req, res) => {
     res.json({
@@ -23,6 +25,12 @@ app.get("/", (req, res) => {
 
 const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-});
+const isTest = process.env.NODE_ENV === "test" || process.argv.some((arg) => arg.includes("test"));
+
+if (!isTest) {
+    app.listen(PORT, () => {
+        console.log(`Server running on http://localhost:${PORT}`);
+    });
+}
+
+export default app;

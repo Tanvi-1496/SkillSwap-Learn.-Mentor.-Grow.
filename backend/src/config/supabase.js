@@ -3,9 +3,12 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
+const supabaseUrl = process.env.SUPABASE_URL || "https://placeholder-project.supabase.co";
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_PUBLISHABLE_KEY || "placeholder-key";
+
 const supabase = createClient(
-    process.env.SUPABASE_URL,
-    process.env.SUPABASE_PUBLISHABLE_KEY
+    supabaseUrl,
+    supabaseKey
 );
 
 export default supabase;
