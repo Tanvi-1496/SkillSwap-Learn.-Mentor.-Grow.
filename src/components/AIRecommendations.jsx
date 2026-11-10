@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
+import { API_URL } from "../lib/api";
 
 const avatarColors = [
     "bg-indigo-600",
@@ -186,7 +187,7 @@ export default function AIRecommendations({ onNavigate }) {
                 }
 
                 const response = await fetch(
-                    "http://localhost:5000/recommendations",
+                    `${API_URL}/recommendations`,
                     {
                         headers: {
                             Authorization: `Bearer ${token}`

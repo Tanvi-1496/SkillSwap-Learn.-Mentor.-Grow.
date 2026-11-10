@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
+import { API_URL } from "../lib/api";
 
 function getInitials(name) {
     if (!name || typeof name !== "string") return "M";
@@ -82,7 +83,7 @@ export default function SearchMentors({ onNavigate, user, pageData = {} }) {
 
     useEffect(() => {
         setLoading(true);
-        fetch("http://localhost:5000/mentors")
+        fetch(`${API_URL}/mentors`)
             .then(res => res.json())
             .then(data => {
                 const rawList = Array.isArray(data?.mentors) ? data.mentors : [];

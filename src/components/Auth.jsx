@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabase";
+import { API_URL } from "../lib/api";
 
 export default function Auth({ mode = "login", onNavigate, redirect, user: propUser }) {
     const isOnboarding = mode === "onboarding";
@@ -186,7 +187,7 @@ export default function Auth({ mode = "login", onNavigate, redirect, user: propU
         setIsSubmitting(true);
 
         try {
-            const response = await fetch("http://localhost:5000/auth/login", {
+            const response = await fetch(`${API_URL}/auth/login`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json"
@@ -235,7 +236,7 @@ export default function Auth({ mode = "login", onNavigate, redirect, user: propU
         setIsSubmitting(true);
 
         try {
-            const response = await fetch("http://localhost:5000/auth/register", {
+            const response = await fetch(`${API_URL}/auth/register`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json"
@@ -310,7 +311,7 @@ export default function Auth({ mode = "login", onNavigate, redirect, user: propU
                 return;
             }
 
-            const response = await fetch("http://localhost:5000/auth/google/onboard", {
+            const response = await fetch(`${API_URL}/auth/google/onboard`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
