@@ -19,23 +19,25 @@ dotenv.config();
 
 const app = express();
 
-const allowedOrigins = [
-    "https://skill-swap-learn-mentor-grow.vercel.app"
-];
-
-app.use(cors({
+const corsOptions = {
     origin: (origin, callback) => {
-        if (!origin || allowedOrigins.includes(origin)) {
-            return callback(null, true);
-        }
-        return callback(new Error(`CORS blocked origin: ${origin}`));
+        const allowed =
+            !origin ||
+            origin === "https://skill-swap-learn-mentor-grow.vercel.app" ||
+            (
+                origin.startsWith("https://skill-swap-learn-mentor-grow-") &&
+                origin.endsWith(".vercel.app")
+            );
+
+        callback(allowed ? null : new Error("CORS blocked origin"), allowed);
     },
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
-    credentials: true
-}));
+    credentials: true,
+    optionsSuccessStatus: 204
+};
 
-app.options(/.*/, cors());
+app.use(cors(corsOptions));
 
 app.use(express.json());
 
