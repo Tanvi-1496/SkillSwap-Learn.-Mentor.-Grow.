@@ -7,6 +7,9 @@ import {
     transcribeAudio,
     isSupportedAudioFormat,
     estimateAudioDuration,
+    resolveDetectedLanguage,
+    SUPPORTED_LANGUAGES,
+    DEFAULT_LANGUAGE,
     MAX_AUDIO_DURATION_SECONDS
 } from "../src/services/gnaniService.js";
 
@@ -122,4 +125,131 @@ test("GnaniService: Test mode returns simulated transcript with mock indicator",
     assert.ok(result.transcript.length > 0);
     assert.equal(result.language, "en-IN");
     assert.equal(result.isMock, true);
+});
+
+// -----------------------------------------------------------------------------
+// Offline Unit Tests for All Six Prisma Language Configurations
+// -----------------------------------------------------------------------------
+
+test("GnaniService: SUPPORTED_LANGUAGES exports all six documented configurations", () => {
+    assert.ok(Array.isArray(SUPPORTED_LANGUAGES));
+    assert.equal(SUPPORTED_LANGUAGES.length, 6);
+
+    const codes = SUPPORTED_LANGUAGES.map((l) => l.code);
+    assert.ok(codes.includes("indic-auto"), "Missing indic-auto");
+    assert.ok(codes.includes("en-IN"), "Missing en-IN");
+    assert.ok(codes.includes("hi-IN"), "Missing hi-IN");
+    assert.ok(codes.includes("mr-IN"), "Missing mr-IN");
+    assert.ok(codes.includes("en-IN,hi-IN"), "Missing en-IN,hi-IN");
+    assert.ok(codes.includes("en-IN,mr-IN"), "Missing en-IN,mr-IN");
+});
+
+test("GnaniService: Configuration 1 - Auto-detect (indic-auto) records single detected language", async () => {
+    const audio = createWavBuffer(2.0, 16000);
+    const result = await transcribeAudio({
+        fileBuffer: audio,
+        fileName: "auto.wav",
+        mimeType: "audio/wav",
+        languageCode: "indic-auto"
+    });
+
+    assert.equal(result.success, true);
+    assert.equal(result.language, "en-IN");
+    assert.equal(result.detectedLanguage, "en-IN");
+    assert.equal(result.requestedLanguage, "indic-auto");
+    assert.ok(!result.language.includes(","), "Detected language must never be comma-separated");
+});
+
+test("GnaniService: Configuration 2 - Explicit English (en-IN)", async () => {
+    const audio = createWavBuffer(2.0, 16000);
+    const result = await transcribeAudio({
+        fileBuffer: audio,
+        fileName: "english.wav",
+        mimeType: "audio/wav",
+        languageCode: "en-IN"
+    });
+
+    assert.equal(result.success, true);
+    assert.equal(result.language, "en-IN");
+    assert.equal(result.detectedLanguage, "en-IN");
+    assert.equal(result.requestedLanguage, "en-IN");
+});
+
+test("GnaniService: Configuration 3 - Explicit Hindi (hi-IN)", async () => {
+    const audio = createWavBuffer(2.0, 16000);
+    const result = await transcribeAudio({
+        fileBuffer: audio,
+        fileName: "hindi.wav",
+        mimeType: "audio/wav",
+        languageCode: "hi-IN"
+    });
+
+    assert.equal(result.success, true);
+    assert.equal(result.language, "hi-IN");
+    assert.equal(result.detectedLanguage, "hi-IN");
+    assert.equal(result.requestedLanguage, "hi-IN");
+});
+
+test("GnaniService: Configuration 4 - Explicit Marathi (mr-IN)", async () => {
+    const audio = createWavBuffer(2.0, 16000);
+    const result = await transcribeAudio({
+        fileBuffer: audio,
+        fileName: "marathi.wav",
+        mimeType: "audio/wav",
+        languageCode: "mr-IN"
+    });
+
+    assert.equal(result.success, true);
+    assert.equal(result.language, "mr-IN");
+    assert.equal(result.detectedLanguage, "mr-IN");
+    assert.equal(result.requestedLanguage, "mr-IN");
+});
+
+test("GnaniService: Configuration 5 - Code-mixed candidate hints (en-IN,hi-IN) stores single detected code", async () => {
+    const audio = createWavBuffer(2.0, 16000);
+    const result = await transcribeAudio({
+        fileBuffer: audio,
+        fileName: "codemix_hi.wav",
+        mimeType: "audio/wav",
+        languageCode: "en-IN,hi-IN"
+    });
+
+    assert.equal(result.success, true);
+    assert.equal(result.language, "en-IN");
+    assert.equal(result.requestedLanguage, "en-IN,hi-IN");
+    assert.ok(!result.language.includes(","), "Candidate hint list must not become stored detected language");
+});
+
+test("GnaniService: Configuration 6 - Code-mixed candidate hints (en-IN,mr-IN) stores single detected code", async () => {
+    const audio = createWavBuffer(2.0, 16000);
+    const result = await transcribeAudio({
+        fileBuffer: audio,
+        fileName: "codemix_mr.wav",
+        mimeType: "audio/wav",
+        languageCode: "en-IN,mr-IN"
+    });
+
+    assert.equal(result.success, true);
+    assert.equal(result.language, "en-IN");
+    assert.equal(result.requestedLanguage, "en-IN,mr-IN");
+    assert.ok(!result.language.includes(","), "Candidate hint list must not become stored detected language");
+});
+
+test("GnaniService: resolveDetectedLanguage prioritizes API detected_language_code over hints", () => {
+    // When API detects Hindi for code-mixed audio
+    const resHi = resolveDetectedLanguage("hi-IN", "en-IN,hi-IN");
+    assert.equal(resHi, "hi-IN");
+
+    // When API detects Marathi for code-mixed audio
+    const resMr = resolveDetectedLanguage("mr-IN", "en-IN,mr-IN");
+    assert.equal(resMr, "mr-IN");
+
+    // When API returns null/empty with candidate hints
+    const resFallback = resolveDetectedLanguage(null, "en-IN,hi-IN");
+    assert.equal(resFallback, "en-IN");
+    assert.ok(!resFallback.includes(","));
+
+    // When API returns null with indic-auto
+    const resAuto = resolveDetectedLanguage("", "indic-auto");
+    assert.equal(resAuto, "en-IN");
 });

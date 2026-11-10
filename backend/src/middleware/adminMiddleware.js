@@ -1,16 +1,10 @@
-/**
- * Admin Authorization Middleware
- *
- * Verifies:
- * 1. Valid Supabase Auth JWT.
- * 2. User's role from trusted public.users table.
- * 3. Strict admin authorization.
- *
- * Never trusts client-supplied roles or user-editable metadata.
- */
 
 import supabase from "../config/supabase.js";
 
+/**
+ * Admin Authorization Middleware
+ * Verifies Supabase JWT and trusted database role.
+ */
 export const adminMiddleware = async (req, res, next) => {
     try {
         const authHeader = req.headers.authorization;
@@ -23,7 +17,7 @@ export const adminMiddleware = async (req, res, next) => {
 
         const token = authHeader.split(" ")[1];
 
-        // Verify the Supabase Auth JWT.
+        // Verify Supabase Auth JWT.
         const { data: authData, error: authError } =
             await supabase.auth.getUser(token);
 
@@ -35,7 +29,7 @@ export const adminMiddleware = async (req, res, next) => {
 
         const userId = authData.user.id;
 
-        // Check the trusted database role.
+        // Check trusted database role.
         const { data: userProfile, error: profileError } = await supabase
             .from("users")
             .select("id, name, email, role")
@@ -76,8 +70,6 @@ export const adminMiddleware = async (req, res, next) => {
     }
 };
 
-// Compatibility for moderation.js
+// Support both named and default imports.
 export const requireAdmin = adminMiddleware;
-
-// Default export for admin.js
 export default adminMiddleware;
