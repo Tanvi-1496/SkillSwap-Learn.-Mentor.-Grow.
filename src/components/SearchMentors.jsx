@@ -82,7 +82,7 @@ export default function SearchMentors({ onNavigate, user, pageData = {} }) {
 
     useEffect(() => {
         setLoading(true);
-        fetch("http://localhost:5000/mentors")
+        fetch("https://skillswap-backend-8g8p.onrender.com/mentors")
             .then(res => res.json())
             .then(data => {
                 const rawList = Array.isArray(data?.mentors) ? data.mentors : [];

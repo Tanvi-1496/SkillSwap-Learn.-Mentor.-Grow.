@@ -44,7 +44,7 @@ export default function TranscriptViewer({ bookingId, initialTranscript, onRefre
                 return;
             }
 
-            const response = await fetch(`http://localhost:5000/bookings/${bookingId}/transcript`, {
+            const response = await fetch(`https://skillswap-backend-8g8p.onrender.com/bookings/${bookingId}/transcript`, {
                 headers: {
                     Authorization: `Bearer ${token}`
                 }
@@ -82,7 +82,7 @@ export default function TranscriptViewer({ bookingId, initialTranscript, onRefre
                     const token = session?.access_token;
                     if (!token) return;
 
-                    const res = await fetch(`http://localhost:5000/chatbot/session-insights/${bookingId}`, {
+                    const res = await fetch(`https://skillswap-backend-8g8p.onrender.com/chatbot/session-insights/${bookingId}`, {
                         headers: { Authorization: `Bearer ${token}` }
                     });
                     if (res.ok) {
@@ -144,7 +144,7 @@ export default function TranscriptViewer({ bookingId, initialTranscript, onRefre
                 return;
             }
 
-            const response = await fetch(`http://localhost:5000/chatbot/session-insights/${bookingId}`, {
+            const response = await fetch(`https://skillswap-backend-8g8p.onrender.com/chatbot/session-insights/${bookingId}`, {
                 method: "POST",
                 headers: {
                     Authorization: `Bearer ${token}`

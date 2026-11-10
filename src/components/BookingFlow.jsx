@@ -44,7 +44,7 @@ export default function BookingFlow({ onNavigate, mentorId }) {
     useEffect(() => {
         if (!mentorId) return;
 
-        fetch(`http://localhost:5000/mentors/${mentorId}`)
+        fetch(`https://skillswap-backend-8g8p.onrender.com/mentors/${mentorId}`)
             .then((res) => res.json())
             .then((data) => {
                 setMentor(data.mentor);
@@ -136,7 +136,7 @@ export default function BookingFlow({ onNavigate, mentorId }) {
             return;
         }
         const bDate = getNextDateForDay(selectedDate);
-        fetch(`http://localhost:5000/bookings/slots?mentor_id=${mentorId}&date=${bDate}`)
+        fetch(`https://skillswap-backend-8g8p.onrender.com/bookings/slots?mentor_id=${mentorId}&date=${bDate}`)
             .then((res) => (res.ok ? res.json() : null))
             .then((data) => {
                 if (data?.bookedSlots) {
@@ -177,7 +177,7 @@ export default function BookingFlow({ onNavigate, mentorId }) {
 
             const bookingDate = getNextDateForDay(selectedDate);
 
-            const response = await fetch("http://localhost:5000/bookings", {
+            const response = await fetch("https://skillswap-backend-8g8p.onrender.com/bookings", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",

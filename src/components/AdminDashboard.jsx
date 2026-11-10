@@ -78,7 +78,7 @@ export default function AdminDashboard({ onNavigate }) {
             setSessionToken(token);
 
             // Verify admin authorization against backend endpoint
-            const res = await fetch("http://localhost:5000/admin/stats", {
+            const res = await fetch("https://skillswap-backend-8g8p.onrender.com/admin/stats", {
                 headers: {
                     Authorization: `Bearer ${token}`
                 }
@@ -120,7 +120,7 @@ export default function AdminDashboard({ onNavigate }) {
         if (!sessionToken) return;
         setLoadingStats(true);
         try {
-            const res = await fetch("http://localhost:5000/admin/stats", {
+            const res = await fetch("https://skillswap-backend-8g8p.onrender.com/admin/stats", {
                 headers: { Authorization: `Bearer ${sessionToken}` }
             });
             if (res.ok) {
@@ -138,7 +138,7 @@ export default function AdminDashboard({ onNavigate }) {
         if (!sessionToken) return;
         setLoadingUsers(true);
         try {
-            let url = "http://localhost:5000/admin/users";
+            let url = "https://skillswap-backend-8g8p.onrender.com/admin/users";
             const params = new URLSearchParams();
             if (userRoleFilter && userRoleFilter !== "all") params.append("role", userRoleFilter);
             if (userSearch.trim()) params.append("search", userSearch.trim());
@@ -165,7 +165,7 @@ export default function AdminDashboard({ onNavigate }) {
         if (!sessionToken) return;
         setLoadingMentors(true);
         try {
-            let url = "http://localhost:5000/admin/mentors";
+            let url = "https://skillswap-backend-8g8p.onrender.com/admin/mentors";
             const params = new URLSearchParams();
             if (mentorVerifFilter && mentorVerifFilter !== "all") {
                 params.append("status", mentorVerifFilter);
@@ -193,7 +193,7 @@ export default function AdminDashboard({ onNavigate }) {
         if (!sessionToken) return;
         setLoadingBookings(true);
         try {
-            let url = "http://localhost:5000/admin/bookings";
+            let url = "https://skillswap-backend-8g8p.onrender.com/admin/bookings";
             if (bookingStatusFilter && bookingStatusFilter !== "all") {
                 url += `?status=${bookingStatusFilter}`;
             }
@@ -244,7 +244,7 @@ export default function AdminDashboard({ onNavigate }) {
                 targetStatus = "approved";
             }
 
-            const res = await fetch(`http://localhost:5000/admin/mentors/${mentorUserId}/verify`, {
+            const res = await fetch(`https://skillswap-backend-8g8p.onrender.com/admin/mentors/${mentorUserId}/verify`, {
                 method: "PATCH",
                 headers: {
                     "Content-Type": "application/json",
@@ -295,7 +295,7 @@ export default function AdminDashboard({ onNavigate }) {
         if (!sessionToken) return;
         setActionLoadingId(bookingId);
         try {
-            const res = await fetch(`http://localhost:5000/admin/bookings/${bookingId}/status`, {
+            const res = await fetch(`https://skillswap-backend-8g8p.onrender.com/admin/bookings/${bookingId}/status`, {
                 method: "PATCH",
                 headers: {
                     "Content-Type": "application/json",

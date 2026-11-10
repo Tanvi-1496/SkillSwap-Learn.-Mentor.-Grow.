@@ -68,7 +68,7 @@ export default function MyBookings({ onNavigate }) {
                 console.warn("Could not determine user role:", roleErr);
             }
 
-            const response = await fetch("http://localhost:5000/bookings", {
+            const response = await fetch("https://skillswap-backend-8g8p.onrender.com/bookings", {
                 headers: {
                     Authorization: `Bearer ${session.access_token}`
                 }
@@ -122,7 +122,7 @@ export default function MyBookings({ onNavigate }) {
                 return;
             }
 
-            const response = await fetch(`http://localhost:5000/bookings/${bookingId}`, {
+            const response = await fetch(`https://skillswap-backend-8g8p.onrender.com/bookings/${bookingId}`, {
                 method: "PATCH",
                 headers: {
                     "Content-Type": "application/json",
@@ -174,7 +174,7 @@ export default function MyBookings({ onNavigate }) {
                 return;
             }
 
-            const response = await fetch(`http://localhost:5000/bookings/${bookingId}`, {
+            const response = await fetch(`https://skillswap-backend-8g8p.onrender.com/bookings/${bookingId}`, {
                 method: "PATCH",
                 headers: {
                     "Content-Type": "application/json",

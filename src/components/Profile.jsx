@@ -34,7 +34,7 @@ export default function Profile({ onNavigate }) {
                     return;
                 }
 
-                const response = await fetch("http://localhost:5000/profile", {
+                const response = await fetch("https://skillswap-backend-8g8p.onrender.com/profile", {
                     headers: {
                         Authorization: `Bearer ${session.access_token}`
                     }

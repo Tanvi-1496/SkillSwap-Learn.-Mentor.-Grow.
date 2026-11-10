@@ -136,7 +136,7 @@ export default function MentorProfile({
     useEffect(() => {
         if (!mentorId) return;
 
-        fetch(`http://localhost:5000/mentors/${mentorId}`)
+        fetch(`https://skillswap-backend-8g8p.onrender.com/mentors/${mentorId}`)
             .then((res) => res.json())
             .then((data) => {
                 setMentor(data.mentor);

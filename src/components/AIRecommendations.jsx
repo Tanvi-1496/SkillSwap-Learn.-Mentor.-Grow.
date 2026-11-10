@@ -186,7 +186,7 @@ export default function AIRecommendations({ onNavigate }) {
                 }
 
                 const response = await fetch(
-                    "http://localhost:5000/recommendations",
+                    "https://skillswap-backend-8g8p.onrender.com/recommendations",
                     {
                         headers: {
                             Authorization: `Bearer ${token}`

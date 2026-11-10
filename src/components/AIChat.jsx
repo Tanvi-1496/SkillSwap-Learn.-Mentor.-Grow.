@@ -301,7 +301,7 @@ export default function AIChat({ onClose, onNavigate, fullPage }) {
 
                 // 1. Fetch Profile for Context
                 try {
-                    const profRes = await fetch("http://localhost:5000/profile", {
+                    const profRes = await fetch("https://skillswap-backend-8g8p.onrender.com/profile", {
                         headers: { Authorization: `Bearer ${token}` }
                     });
                     if (profRes.ok && isMounted) {
@@ -324,7 +324,7 @@ export default function AIChat({ onClose, onNavigate, fullPage }) {
 
                 // 2. Load Persistent Conversation History from Backend
                 try {
-                    const histRes = await fetch("http://localhost:5000/chatbot/history", {
+                    const histRes = await fetch("https://skillswap-backend-8g8p.onrender.com/chatbot/history", {
                         headers: { Authorization: `Bearer ${token}` }
                     });
                     if (histRes.ok && isMounted) {
@@ -369,7 +369,7 @@ export default function AIChat({ onClose, onNavigate, fullPage }) {
             } = await supabase.auth.getSession();
             const token = session?.access_token;
             if (token) {
-                await fetch("http://localhost:5000/chatbot/history", {
+                await fetch("https://skillswap-backend-8g8p.onrender.com/chatbot/history", {
                     method: "DELETE",
                     headers: { Authorization: `Bearer ${token}` }
                 });
@@ -402,7 +402,7 @@ export default function AIChat({ onClose, onNavigate, fullPage }) {
                     content: m.content
                 }));
 
-                const response = await fetch("http://localhost:5000/chatbot/message", {
+                const response = await fetch("https://skillswap-backend-8g8p.onrender.com/chatbot/message", {
                     method: "POST",
                     headers: {
                         "Content-Type": "application/json",
