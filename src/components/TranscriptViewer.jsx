@@ -19,6 +19,13 @@ export default function TranscriptViewer({ bookingId, initialTranscript, onRefre
     const [error, setError] = useState(null);
     const [copied, setCopied] = useState(false);
 
+    // Session Intelligence state powered by Gnani Evon 30B
+    const [insights, setInsights] = useState(null);
+    const [insightsLoading, setInsightsLoading] = useState(false);
+    const [insightsError, setInsightsError] = useState(null);
+    const [insightsOpen, setInsightsOpen] = useState(true);
+    const [checkedActions, setCheckedActions] = useState({});
+
     const fetchTranscript = async () => {
         if (!bookingId) return;
 
@@ -64,6 +71,34 @@ export default function TranscriptViewer({ bookingId, initialTranscript, onRefre
         }
     };
 
+    // Auto-check for existing cached session insights
+    useEffect(() => {
+        if (bookingId && transcriptData?.status === "completed") {
+            const checkCachedInsights = async () => {
+                try {
+                    const {
+                        data: { session }
+                    } = await supabase.auth.getSession();
+                    const token = session?.access_token;
+                    if (!token) return;
+
+                    const res = await fetch(`http://localhost:5000/chatbot/session-insights/${bookingId}`, {
+                        headers: { Authorization: `Bearer ${token}` }
+                    });
+                    if (res.ok) {
+                        const data = await res.json();
+                        if (data.success && data.insights) {
+                            setInsights(data);
+                        }
+                    }
+                } catch {
+                    // Non-fatal
+                }
+            };
+            checkCachedInsights();
+        }
+    }, [bookingId, transcriptData?.status]);
+
     useEffect(() => {
         if (initialTranscript) {
             setTranscriptData(initialTranscript);
@@ -89,6 +124,54 @@ export default function TranscriptViewer({ bookingId, initialTranscript, onRefre
         document.body.appendChild(element);
         element.click();
         document.body.removeChild(element);
+    };
+
+    const handleGenerateInsights = async () => {
+        if (!bookingId) return;
+
+        try {
+            setInsightsLoading(true);
+            setInsightsError(null);
+
+            const {
+                data: { session }
+            } = await supabase.auth.getSession();
+            const token = session?.access_token;
+
+            if (!token) {
+                setInsightsError("Please sign in to generate session insights.");
+                setInsightsLoading(false);
+                return;
+            }
+
+            const response = await fetch(`http://localhost:5000/chatbot/session-insights/${bookingId}`, {
+                method: "POST",
+                headers: {
+                    Authorization: `Bearer ${token}`
+                }
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.error || "Failed to generate session intelligence");
+            }
+
+            setInsights(data);
+            setInsightsOpen(true);
+        } catch (err) {
+            console.error("Session insights generation error:", err);
+            setInsightsError(err.message || "Failed to generate session insights");
+        } finally {
+            setInsightsLoading(false);
+        }
+    };
+
+    const toggleActionItem = (idx) => {
+        setCheckedActions((prev) => ({
+            ...prev,
+            [idx]: !prev[idx]
+        }));
     };
 
     if (loading) {
@@ -167,7 +250,7 @@ export default function TranscriptViewer({ bookingId, initialTranscript, onRefre
 
     // Success State ('completed')
     return (
-        <div className="bg-white rounded-2xl p-6 border border-[#E5E7EB] shadow-xs space-y-4">
+        <div className="bg-white rounded-2xl p-6 border border-[#E5E7EB] shadow-xs space-y-5">
             {/* Header with metadata badges */}
             <div className="flex items-center justify-between flex-wrap gap-2 border-b border-slate-100 pb-4">
                 <div className="flex items-center gap-2 flex-wrap">
@@ -267,7 +350,191 @@ export default function TranscriptViewer({ bookingId, initialTranscript, onRefre
                     </span>
                 </div>
             )}
+
+            {/* AI Session Intelligence Powered by Gnani Evon 30B */}
+            <div className="mt-4 pt-4 border-t border-slate-100 space-y-3">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div className="flex items-center gap-2">
+                        <div className="w-7 h-7 bg-gradient-to-br from-indigo-600 to-violet-600 rounded-lg flex items-center justify-center text-white text-xs shadow-xs">
+                            ✨
+                        </div>
+                        <div>
+                            <h4 className="text-sm font-bold text-slate-900">
+                                AI Session Intelligence
+                            </h4>
+                            <p className="text-[11px] text-slate-500">
+                                Structured post-session digest powered by Gnani Evon 30B
+                            </p>
+                        </div>
+                    </div>
+
+                    {!insights ? (
+                        <button
+                            type="button"
+                            onClick={handleGenerateInsights}
+                            disabled={insightsLoading}
+                            className="text-xs font-semibold bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white px-4 py-2 rounded-xl transition-all shadow-xs disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
+                        >
+                            {insightsLoading ? (
+                                <>
+                                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                    <span>Evon 30B Reasoning...</span>
+                                </>
+                            ) : (
+                                <>
+                                    <span>✨</span>
+                                    <span>Generate Session Takeaways</span>
+                                </>
+                            )}
+                        </button>
+                    ) : (
+                        <div className="flex items-center gap-2">
+                            <span className="text-[11px] font-medium bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-full border border-indigo-100">
+                                {insights.cached ? "⚡ Instant Cached Digest" : "✨ Generated with Evon 30B"}
+                            </span>
+                            <button
+                                type="button"
+                                onClick={() => setInsightsOpen(!insightsOpen)}
+                                className="text-xs text-slate-600 hover:text-slate-900 font-semibold px-2.5 py-1 rounded-lg border border-slate-200 hover:bg-slate-50 cursor-pointer"
+                            >
+                                {insightsOpen ? "Collapse ▲" : "Expand ▼"}
+                            </button>
+                        </div>
+                    )}
+                </div>
+
+                {insightsError && (
+                    <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 flex items-center gap-2">
+                        <span>⚠️</span>
+                        <span>{insightsError}</span>
+                    </div>
+                )}
+
+                {insights && insightsOpen && (
+                    <div className="bg-gradient-to-br from-indigo-50/40 via-white to-violet-50/40 rounded-xl p-5 border border-indigo-100 space-y-4 text-xs">
+                        {/* 1. Summary */}
+                        <div className="space-y-1.5">
+                            <div className="font-bold text-indigo-900 flex items-center gap-1.5 text-xs">
+                                <span>📝</span>
+                                <span>Session Summary</span>
+                            </div>
+                            <div className="bg-white p-3 rounded-lg border border-indigo-100/80 text-slate-700 leading-relaxed shadow-2xs">
+                                {insights.insights.summary}
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {/* 2. Key Discussion Points */}
+                            {insights.insights.key_discussion_points?.length > 0 && (
+                                <div className="space-y-1.5 bg-white p-3.5 rounded-lg border border-slate-200/80 shadow-2xs">
+                                    <div className="font-bold text-slate-900 flex items-center gap-1.5 text-xs">
+                                        <span>💡</span>
+                                        <span>Key Discussion Points</span>
+                                    </div>
+                                    <ul className="space-y-1.5 pl-1">
+                                        {insights.insights.key_discussion_points.map((pt, i) => (
+                                            <li key={i} className="flex items-start gap-2 text-slate-600 leading-normal">
+                                                <span className="text-indigo-500 font-bold">•</span>
+                                                <span>{pt}</span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
+
+                            {/* 3. Learning Takeaways */}
+                            {insights.insights.learning_takeaways?.length > 0 && (
+                                <div className="space-y-1.5 bg-white p-3.5 rounded-lg border border-slate-200/80 shadow-2xs">
+                                    <div className="font-bold text-slate-900 flex items-center gap-1.5 text-xs">
+                                        <span>🎯</span>
+                                        <span>Learning Takeaways</span>
+                                    </div>
+                                    <ul className="space-y-1.5 pl-1">
+                                        {insights.insights.learning_takeaways.map((tw, i) => (
+                                            <li key={i} className="flex items-start gap-2 text-slate-600 leading-normal">
+                                                <span className="text-emerald-500 font-bold">✓</span>
+                                                <span>{tw}</span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* 4. Action Items (Interactive Checklist) */}
+                        {insights.insights.action_items?.length > 0 && (
+                            <div className="space-y-2 bg-white p-3.5 rounded-lg border border-slate-200/80 shadow-2xs">
+                                <div className="font-bold text-slate-900 flex items-center gap-1.5 text-xs">
+                                    <span>⚡</span>
+                                    <span>Post-Session Action Items</span>
+                                </div>
+                                <div className="space-y-1.5">
+                                    {insights.insights.action_items.map((action, i) => {
+                                        const isDone = !!checkedActions[i];
+                                        return (
+                                            <div
+                                                key={i}
+                                                onClick={() => toggleActionItem(i)}
+                                                className={`flex items-center gap-2.5 p-2 rounded-md transition-colors cursor-pointer select-none ${
+                                                    isDone ? "bg-emerald-50/70" : "hover:bg-slate-50"
+                                                }`}
+                                            >
+                                                <input
+                                                    type="checkbox"
+                                                    checked={isDone}
+                                                    onChange={() => {}}
+                                                    className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                                                />
+                                                <span className={`text-xs ${isDone ? "line-through text-slate-400" : "text-slate-700"}`}>
+                                                    {action}
+                                                </span>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {/* 5. Next Steps */}
+                            {insights.insights.next_steps?.length > 0 && (
+                                <div className="space-y-1.5 bg-white p-3.5 rounded-lg border border-slate-200/80 shadow-2xs">
+                                    <div className="font-bold text-slate-900 flex items-center gap-1.5 text-xs">
+                                        <span>🚀</span>
+                                        <span>Recommended Next Steps</span>
+                                    </div>
+                                    <ul className="space-y-1.5 pl-1">
+                                        {insights.insights.next_steps.map((step, i) => (
+                                            <li key={i} className="flex items-start gap-2 text-slate-600 leading-normal">
+                                                <span className="text-violet-500 font-bold">{i + 1}.</span>
+                                                <span>{step}</span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
+
+                            {/* 6. Follow-up Questions for Mentor */}
+                            {insights.insights.follow_up_questions?.length > 0 && (
+                                <div className="space-y-1.5 bg-white p-3.5 rounded-lg border border-slate-200/80 shadow-2xs">
+                                    <div className="font-bold text-slate-900 flex items-center gap-1.5 text-xs">
+                                        <span>❓</span>
+                                        <span>Follow-up Questions for Next Session</span>
+                                    </div>
+                                    <ul className="space-y-1.5 pl-1">
+                                        {insights.insights.follow_up_questions.map((q, i) => (
+                                            <li key={i} className="flex items-start gap-2 text-slate-600 leading-normal">
+                                                <span className="text-indigo-400 font-bold">💬</span>
+                                                <span className="italic">{q}</span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
+            </div>
         </div>
     );
 }
-

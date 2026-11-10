@@ -662,9 +662,9 @@ router.patch("/:id", authMiddleware, async (req, res) => {
 // ---------------------------------------------------------------------------
 // Transcript Record Storage Helpers (Supabase with In-Memory Resilience Fallback)
 // ---------------------------------------------------------------------------
-const transcriptMemoryStore = new Map();
+export const transcriptMemoryStore = new Map();
 
-async function getTranscriptRecord(bookingId) {
+export async function getTranscriptRecord(bookingId) {
     try {
         const { data, error } = await supabase
             .from("session_transcripts")
@@ -682,7 +682,7 @@ async function getTranscriptRecord(bookingId) {
     return transcriptMemoryStore.get(bookingId) || null;
 }
 
-async function upsertTranscriptRecord(bookingId, recordData) {
+export async function upsertTranscriptRecord(bookingId, recordData) {
     const existing = transcriptMemoryStore.get(bookingId) || {};
     const merged = {
         id: existing.id || undefined,

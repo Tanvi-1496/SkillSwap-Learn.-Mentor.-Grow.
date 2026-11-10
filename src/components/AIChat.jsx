@@ -2,17 +2,18 @@ import { useState, useRef, useEffect } from "react";
 import { supabase } from "../lib/supabase";
 
 const suggestions = [
-    "What do you know about my profile, and what should I learn next?",
     "Create a personalized learning roadmap",
-    "Help me prepare for an interview",
-    "Suggest project ideas for my portfolio",
-    "Which skills should I focus on for placements?",
+    "Suggest portfolio project ideas for my resume",
+    "How to prepare for technical coding interviews?",
+    "Explain React state management & hooks with an example",
+    "What do you know about my profile, and what should I learn next?",
 ];
 
 const initialMessages = [
     {
         role: "ai",
-        content: "Hi! I'm SkillSwap AI — your personal learning and career assistant. I can help you find mentors, build roadmaps, prepare for interviews, and more. What would you like to work on today?",
+        content: "Hi! I'm SkillSwap AI powered by Gnani Evon 30B — your personal learning companion. I can help you understand code, build personalized roadmaps, suggest portfolio projects, prepare for technical interviews, and match with experienced mentors. What would you like to work on today?",
+        model: "Gnani Evon 30B",
     },
 ];
 
@@ -86,13 +87,12 @@ function generatePersonalizedAdvice(profile) {
     const level = profile.level || "Intermediate";
     const semester = profile.semester ? `${profile.semester}th Semester` : "Enrolled Student";
 
-    // Tailor next recommended skills specifically to learning_requirement and career_goal
     let nextSkills = [];
     const combined = `${goal} ${requirement} ${skills}`.toLowerCase();
 
     if (combined.includes("react") || combined.includes("frontend") || combined.includes("web")) {
         nextSkills = [
-            "Component lifecycle, JSX composition, and core React Hooks (`useState`, `useEffect`, `useCallback`)",
+            "Component lifecycle, JSX composition, and core React Hooks (useState, useEffect, useCallback)",
             "State management & routing with React Router and Zustand or Redux Toolkit",
             "Modern UI component architecture using Tailwind CSS and TypeScript",
             "Asynchronous state management with REST APIs and React Query",
@@ -144,10 +144,9 @@ ${nextSkills.map(s => `• ${s}`).join("\n")}
 💡 Would you like me to find you a mentor who specializes in ${requirement || goal}?`;
 }
 
-function getAIResponse(input, profile) {
+function getLocalAIResponse(input, profile) {
     const lower = input.toLowerCase();
 
-    // Check if the user is asking about their profile or what to learn next
     const isProfileQuery =
         lower.includes("profile") ||
         lower.includes("what should i learn next") ||
@@ -160,50 +159,123 @@ function getAIResponse(input, profile) {
     if (isProfileQuery && profile && (profile.skills || profile.career_goal || profile.learning_requirement)) {
         return {
             role: "ai",
-            content: generatePersonalizedAdvice(profile)
+            content: generatePersonalizedAdvice(profile),
+            type: "text",
+            model: "Gnani Evon 30B (Offline Local)"
         };
     }
 
-    // Roadmap query
     if (lower.includes("roadmap")) {
         const config = getRoadmapConfig(profile);
         return {
             role: "ai",
             content: config.title,
             type: "roadmap",
-            roadmapConfig: config
+            roadmapConfig: config,
+            model: "Gnani Evon 30B (Offline Local)"
         };
     }
 
-    // Interview prep query
     if (lower.includes("interview") || lower.includes("placement")) {
         return {
             role: "ai",
-            content: "Here is a targeted technical interview preparation plan:\n\n**Core Topics:**\n• Data Structures & Algorithms (Arrays, Linked Lists, Trees, Graphs)\n• System Design & Object-Oriented Principles\n• Database queries, indexing, and schema design\n• Behavioral & project walkthrough questions\n\n**Practice Strategy:**\n• Solve 2-3 LeetCode problems daily\n• Conduct mock interviews with peers or mentors\n• Review core architectural tradeoffs\n\n💡 Want me to find you a mentor for mock interview practice?",
+            content: "Here is a targeted technical interview preparation plan:\n\n**Core Topics:**\n• Data Structures & Algorithms (Arrays, Linked Lists, Trees, Graphs)\n• System Design & Object-Oriented Principles\n• Database queries, indexing, and schema design\n• Behavioral & project walkthrough questions (STAR Method)\n\n**Practice Strategy:**\n• Solve 2-3 LeetCode problems daily\n• Conduct mock interviews with peers or mentors\n• Review core architectural tradeoffs\n\n💡 Want me to find you a mentor for mock interview practice?",
+            type: "interview",
+            model: "Gnani Evon 30B (Offline Local)"
         };
     }
 
-    // ML projects query
     if (lower.includes("ml") || lower.includes("machine learning") || (lower.includes("project") && lower.includes("idea"))) {
         return {
             role: "ai",
-            content: "Here are 5 impactful project ideas for your portfolio:\n\n1. 🏠 House Price Predictor — Linear regression with real estate dataset\n2. 📧 Email Spam Classifier — NLP text classification with Naive Bayes\n3. 😊 Sentiment Analyzer — Social media review sentiment classification\n4. 🖼️ Image Classifier — CNN with transfer learning\n5. 🎬 Movie Recommender — Collaborative filtering and vector similarity\n\nStart with #1 or #3 for a clean end-to-end project. Would you like me to find you a mentor to guide your project?",
+            content: "Here are impactful portfolio project ideas designed for recruiters:\n\n1. 🏠 House Price Predictor — Linear regression with real estate dataset\n2. 📧 Email Spam Classifier — NLP text classification with Naive Bayes\n3. 😊 Sentiment Analyzer — Social media review sentiment classification\n4. 🖼️ Image Classifier — CNN with transfer learning\n5. 🎬 Movie Recommender — Collaborative filtering and vector similarity\n\nStart with #1 or #3 for a clean end-to-end project. Would you like me to find you a mentor to guide your project?",
+            type: "project",
+            model: "Gnani Evon 30B (Offline Local)"
         };
     }
 
-    // If profile is available, provide context-aware response
     if (profile && (profile.skills || profile.career_goal || profile.learning_requirement)) {
         return {
             role: "ai",
-            content: `Great question! Looking at your focus on ${profile.learning_requirement || profile.career_goal || "tech skills"}, I recommend dedicating structured time to hands-on exercises and building working projects. Would you like me to find you a mentor who specializes in ${profile.learning_requirement || profile.career_goal}?`
+            content: `Great question! Looking at your focus on ${profile.learning_requirement || profile.career_goal || "tech skills"}, I recommend dedicating structured time to hands-on exercises and building working projects. Would you like me to find you a mentor who specializes in ${profile.learning_requirement || profile.career_goal}?`,
+            type: "text",
+            model: "Gnani Evon 30B (Offline Local)"
         };
     }
 
-    // Fallback when profile context cannot be retrieved
     return {
         role: "ai",
         content: "Great question! I recommend starting with solid fundamentals in your chosen domain, building hands-on projects, and practicing problem solving. Would you like me to find you a mentor who specializes in this area?",
+        type: "text",
+        model: "Gnani Evon 30B (Offline Local)"
     };
+}
+
+function FormattedContent({ content, onNavigate }) {
+    if (!content) return null;
+
+    const codeBlockRegex = /```([a-zA-Z0-9_-]*)\n([\s\S]*?)```/g;
+    const parts = [];
+    let lastIndex = 0;
+    let match;
+
+    while ((match = codeBlockRegex.exec(content)) !== null) {
+        if (match.index > lastIndex) {
+            parts.push({ type: "text", text: content.slice(lastIndex, match.index) });
+        }
+        parts.push({
+            type: "code",
+            lang: match[1] || "code",
+            code: match[2].trim()
+        });
+        lastIndex = match.index + match[0].length;
+    }
+
+    if (lastIndex < content.length) {
+        parts.push({ type: "text", text: content.slice(lastIndex) });
+    }
+
+    return (
+        <div className="space-y-2">
+            {parts.map((part, idx) => {
+                if (part.type === "code") {
+                    return (
+                        <div key={idx} className="my-2 rounded-xl bg-slate-900 text-slate-100 p-3 text-xs font-mono overflow-x-auto shadow-inner border border-slate-800">
+                            <div className="flex justify-between items-center text-[10px] text-slate-400 pb-1.5 mb-1.5 border-b border-slate-800 uppercase font-semibold">
+                                <span>{part.lang}</span>
+                                <button
+                                    type="button"
+                                    onClick={() => navigator.clipboard.writeText(part.code)}
+                                    className="hover:text-indigo-400 cursor-pointer text-[10px]"
+                                >
+                                    Copy Code
+                                </button>
+                            </div>
+                            <pre className="whitespace-pre overflow-x-auto">{part.code}</pre>
+                        </div>
+                    );
+                }
+
+                return (
+                    <div key={idx} className="whitespace-pre-wrap leading-relaxed">
+                        {part.text}
+                    </div>
+                );
+            })}
+
+            {(content.toLowerCase().includes("find you a mentor") ||
+              content.toLowerCase().includes("find a mentor") ||
+              content.toLowerCase().includes("specializes in")) && (
+                <button
+                    type="button"
+                    className="inline-flex items-center gap-1.5 mt-2 text-xs bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold px-3 py-1.5 rounded-lg transition-colors cursor-pointer border border-indigo-200/60"
+                    onClick={() => onNavigate && onNavigate("aiRecs")}
+                >
+                    <span>🎯</span> Find a Verified Mentor →
+                </button>
+            )}
+        </div>
+    );
 }
 
 export default function AIChat({ onClose, onNavigate, fullPage }) {
@@ -211,87 +283,214 @@ export default function AIChat({ onClose, onNavigate, fullPage }) {
     const [input, setInput] = useState("");
     const [loading, setLoading] = useState(false);
     const [studentProfile, setStudentProfile] = useState(null);
+    const [modelBadge, setModelBadge] = useState("Gnani Evon 30B");
     const bottomRef = useRef(null);
 
-    // Fetch authenticated student profile context on mount
+    // Fetch student profile and load persistent conversation history
     useEffect(() => {
-        const loadStudentProfile = async () => {
+        let isMounted = true;
+
+        const initChat = async () => {
             try {
                 const {
                     data: { session }
                 } = await supabase.auth.getSession();
 
-                if (!session?.access_token) return;
+                const token = session?.access_token;
+                if (!token) return;
 
-                const response = await fetch("http://localhost:5000/profile", {
-                    headers: {
-                        Authorization: `Bearer ${session.access_token}`
+                // 1. Fetch Profile for Context
+                try {
+                    const profRes = await fetch("http://localhost:5000/profile", {
+                        headers: { Authorization: `Bearer ${token}` }
+                    });
+                    if (profRes.ok && isMounted) {
+                        const data = await profRes.json();
+                        const sp = data.profile?.student_profiles?.[0];
+                        if (sp) {
+                            setStudentProfile({
+                                name: data.profile.name,
+                                skills: Array.isArray(sp.skills) ? sp.skills.join(", ") : (sp.skills || ""),
+                                career_goal: sp.career_goal || "",
+                                learning_requirement: sp.learning_requirement || "",
+                                level: sp.level || "",
+                                semester: sp.semester || ""
+                            });
+                        }
                     }
-                });
+                } catch (profErr) {
+                    console.warn("[AIChat] Profile fetch skipped:", profErr.message);
+                }
 
-                if (response.ok) {
-                    const data = await response.json();
-                    const sp = data.profile?.student_profiles?.[0];
-                    if (sp) {
-                        setStudentProfile({
-                            name: data.profile.name,
-                            skills: Array.isArray(sp.skills) ? sp.skills.join(", ") : (sp.skills || ""),
-                            career_goal: sp.career_goal || "",
-                            learning_requirement: sp.learning_requirement || "",
-                            level: sp.level || "",
-                            semester: sp.semester || ""
-                        });
+                // 2. Load Persistent Conversation History from Backend
+                try {
+                    const histRes = await fetch("http://localhost:5000/chatbot/history", {
+                        headers: { Authorization: `Bearer ${token}` }
+                    });
+                    if (histRes.ok && isMounted) {
+                        const histData = await histRes.json();
+                        if (histData.success && Array.isArray(histData.messages) && histData.messages.length > 0) {
+                            const formatted = histData.messages.map((m) => ({
+                                id: m.id,
+                                role: m.role === "assistant" ? "ai" : m.role,
+                                content: m.content,
+                                type: m.message_type || "text",
+                                metadata: m.metadata || {},
+                                roadmapConfig: m.metadata?.roadmapConfig,
+                                model: m.metadata?.model,
+                                is_mock: m.metadata?.is_mock
+                            }));
+                            setMessages(formatted);
+                        }
                     }
+                } catch (histErr) {
+                    console.warn("[AIChat] History fetch skipped:", histErr.message);
                 }
             } catch (err) {
-                console.error("AI Chat profile fetch error:", err);
+                console.error("[AIChat] Init error:", err);
             }
         };
 
-        loadStudentProfile();
+        initChat();
+
+        return () => {
+            isMounted = false;
+        };
     }, []);
 
     useEffect(() => {
         bottomRef.current?.scrollIntoView({ behavior: "smooth" });
     }, [messages]);
 
-    const sendMessage = (text) => {
-        if (!text.trim()) return;
+    const handleClearHistory = async () => {
+        try {
+            const {
+                data: { session }
+            } = await supabase.auth.getSession();
+            const token = session?.access_token;
+            if (token) {
+                await fetch("http://localhost:5000/chatbot/history", {
+                    method: "DELETE",
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+            }
+        } catch (err) {
+            console.warn("[AIChat] Clear history backend notice:", err);
+        }
+        setMessages(initialMessages);
+    };
+
+    const sendMessage = async (text) => {
+        if (!text.trim() || loading) return;
+
         const userMsg = { role: "user", content: text };
-        setMessages((prev) => [...prev, userMsg]);
+        const updatedMessages = [...messages, userMsg];
+        setMessages(updatedMessages);
         setInput("");
         setLoading(true);
+
+        try {
+            const {
+                data: { session }
+            } = await supabase.auth.getSession();
+            const token = session?.access_token;
+
+            if (token) {
+                // Send up to 8 recent history items for conversational context
+                const historyContext = updatedMessages.slice(-8).map((m) => ({
+                    role: m.role === "ai" ? "assistant" : "user",
+                    content: m.content
+                }));
+
+                const response = await fetch("http://localhost:5000/chatbot/message", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                        message: text,
+                        history: historyContext
+                    })
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    if (result.success && result.message) {
+                        if (result.model) {
+                            setModelBadge(result.model.includes("30B") ? "Gnani Evon 30B" : result.model);
+                        }
+
+                        const aiMsg = {
+                            role: "ai",
+                            content: result.message.content,
+                            type: result.message.type || "text",
+                            metadata: result.message.metadata || {},
+                            roadmapConfig:
+                                result.message.type === "roadmap"
+                                    ? (result.message.metadata?.roadmapConfig || getRoadmapConfig(studentProfile))
+                                    : null,
+                            model: result.model,
+                            is_mock: result.is_mock
+                        };
+
+                        setMessages((prev) => [...prev, aiMsg]);
+                        setLoading(false);
+                        return;
+                    }
+                }
+            }
+        } catch (err) {
+            console.warn("[AIChat] Backend Evon call failed, falling back to local reasoning:", err);
+        }
+
+        // Resilient Fallback to local reasoning
         setTimeout(() => {
-            setMessages((prev) => [...prev, getAIResponse(text, studentProfile)]);
+            setMessages((prev) => [...prev, getLocalAIResponse(text, studentProfile)]);
             setLoading(false);
-        }, 1000);
+        }, 600);
     };
 
     const container = fullPage
         ? "flex flex-col h-full"
-        : "fixed bottom-16 sm:bottom-6 right-3 sm:right-6 w-[calc(100vw-1.5rem)] max-w-sm sm:w-96 h-[520px] max-h-[78vh] bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col z-[1000] overflow-hidden";
+        : "fixed bottom-16 sm:bottom-6 right-3 sm:right-6 w-[calc(100vw-1.5rem)] max-w-sm sm:w-96 h-[540px] max-h-[80vh] bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col z-[1000] overflow-hidden";
 
     return (
         <div className={container}>
             {/* Header */}
-            <div className="bg-gradient-to-r from-indigo-600 to-violet-600 px-5 py-4 flex items-center gap-3 flex-shrink-0">
-                <div className="w-9 h-9 bg-white/20 rounded-full flex items-center justify-center text-white text-lg">✨</div>
-                <div className="flex-1">
-                    <div className="text-white font-bold text-sm">SkillSwap AI</div>
-                    <div className="text-indigo-200 text-xs">Your learning & career assistant</div>
+            <div className="bg-gradient-to-r from-indigo-600 via-indigo-700 to-violet-700 px-5 py-4 flex items-center gap-3 flex-shrink-0 text-white shadow-sm">
+                <div className="w-9 h-9 bg-white/20 rounded-xl flex items-center justify-center text-white text-lg backdrop-blur-xs flex-shrink-0">
+                    ✨
                 </div>
-                <div className="flex items-center gap-1">
-                    <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
-                    <span className="text-white/80 text-xs">Online</span>
+                <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                        <span className="font-bold text-sm truncate">SkillSwap AI</span>
+                        <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded-full font-medium truncate">
+                            {modelBadge}
+                        </span>
+                    </div>
+                    <div className="text-indigo-200 text-xs truncate">Your AI Learning Companion</div>
                 </div>
-                {!fullPage && (
+
+                <div className="flex items-center gap-1.5 flex-shrink-0">
                     <button
-                        className="text-white/80 hover:text-white p-1.5 hover:bg-white/10 rounded-lg transition-colors cursor-pointer"
-                        onClick={onClose}
+                        type="button"
+                        onClick={handleClearHistory}
+                        title="Clear conversation history"
+                        className="text-white/70 hover:text-white p-1.5 hover:bg-white/10 rounded-lg transition-colors cursor-pointer text-xs"
                     >
-                        ✕
+                        🔄
                     </button>
-                )}
+                    {!fullPage && (
+                        <button
+                            type="button"
+                            className="text-white/80 hover:text-white p-1.5 hover:bg-white/10 rounded-lg transition-colors cursor-pointer"
+                            onClick={onClose}
+                        >
+                            ✕
+                        </button>
+                    )}
+                </div>
             </div>
 
             {/* Messages */}
@@ -299,69 +498,63 @@ export default function AIChat({ onClose, onNavigate, fullPage }) {
                 {messages.map((msg, i) => (
                     <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
                         {msg.role === "ai" && (
-                            <div className="w-7 h-7 bg-gradient-to-br from-indigo-600 to-violet-600 rounded-full flex items-center justify-center text-white text-xs mr-2 flex-shrink-0 mt-1">
+                            <div className="w-7 h-7 bg-gradient-to-br from-indigo-600 to-violet-600 rounded-full flex items-center justify-center text-white text-xs mr-2 flex-shrink-0 mt-1 shadow-xs">
                                 ✨
                             </div>
                         )}
                         <div
                             className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
                                 msg.role === "user"
-                                    ? "bg-indigo-600 text-white rounded-br-md"
-                                    : "bg-white text-slate-800 shadow-sm border border-slate-100 rounded-bl-md"
+                                    ? "bg-indigo-600 text-white rounded-br-md shadow-xs"
+                                    : "bg-white text-slate-800 shadow-xs border border-slate-200/80 rounded-bl-md"
                             }`}
                         >
                             {msg.type === "roadmap" ? (
                                 <div>
-                                    <div className="font-bold text-indigo-700 mb-3">{msg.content}</div>
-                                    {(msg.roadmapConfig?.items || getRoadmapConfig(studentProfile).items).map((item, j) => (
-                                        <div key={j} className="flex items-center gap-3 mb-2">
-                                            <div
-                                                className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
-                                                    item.done ? "bg-emerald-500 border-emerald-500" : "border-slate-300"
-                                                }`}
-                                            >
-                                                {item.done && <span className="text-white text-xs">✓</span>}
+                                    <div className="font-bold text-indigo-700 mb-2">{msg.content}</div>
+                                    <div className="space-y-1.5 my-2">
+                                        {(msg.roadmapConfig?.items || getRoadmapConfig(studentProfile).items).map((item, j) => (
+                                            <div key={j} className="flex items-center gap-2.5">
+                                                <div
+                                                    className={`w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
+                                                        item.done ? "bg-emerald-500 border-emerald-500" : "border-slate-300"
+                                                    }`}
+                                                >
+                                                    {item.done && <span className="text-white text-[10px]">✓</span>}
+                                                </div>
+                                                <div className={`text-xs ${item.done ? "line-through text-slate-400" : "text-slate-700"}`}>
+                                                    <span className="font-semibold">{item.week}</span> — {item.topic}
+                                                </div>
                                             </div>
-                                            <div className={`text-xs ${item.done ? "line-through text-slate-400" : "text-slate-700"}`}>
-                                                <span className="font-semibold">{item.week}</span> — {item.topic}
-                                            </div>
-                                        </div>
-                                    ))}
+                                        ))}
+                                    </div>
                                     <button
-                                        className="mt-3 text-xs bg-indigo-50 text-indigo-700 font-semibold px-3 py-1.5 rounded-lg hover:bg-indigo-100 transition-colors w-full cursor-pointer"
-                                        onClick={() => onNavigate("aiRecs")}
+                                        type="button"
+                                        className="mt-3 text-xs bg-indigo-50 text-indigo-700 font-semibold px-3 py-1.5 rounded-lg hover:bg-indigo-100 transition-colors w-full cursor-pointer border border-indigo-200/60"
+                                        onClick={() => onNavigate && onNavigate("aiRecs")}
                                     >
-                                        🤖 Find a Mentor for {msg.roadmapConfig?.mentorTopic || "this topic"}
+                                        🤖 Find a Mentor for {msg.roadmapConfig?.mentorTopic || "this roadmap"}
                                     </button>
                                 </div>
                             ) : (
-                                <div className="whitespace-pre-wrap">
-                                    {msg.content}
-                                    {(msg.content.includes("find you a") || msg.content.includes("find a mentor") || msg.content.includes("mentor") || msg.content.includes("Mentor")) ? (
-                                        <button
-                                            className="block mt-2.5 text-xs bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
-                                            onClick={() => onNavigate("aiRecs")}
-                                        >
-                                            Find a Mentor for this topic →
-                                        </button>
-                                    ) : null}
-                                </div>
+                                <FormattedContent content={msg.content} onNavigate={onNavigate} />
                             )}
                         </div>
                     </div>
                 ))}
 
                 {loading && (
-                    <div className="flex justify-start">
-                        <div className="w-7 h-7 bg-gradient-to-br from-indigo-600 to-violet-600 rounded-full flex items-center justify-center text-white text-xs mr-2 flex-shrink-0">
+                    <div className="flex justify-start items-center">
+                        <div className="w-7 h-7 bg-gradient-to-br from-indigo-600 to-violet-600 rounded-full flex items-center justify-center text-white text-xs mr-2 flex-shrink-0 shadow-xs">
                             ✨
                         </div>
-                        <div className="bg-white rounded-2xl rounded-bl-md px-4 py-3 shadow-sm border border-slate-100">
-                            <div className="flex gap-1">
+                        <div className="bg-white rounded-2xl rounded-bl-md px-4 py-3 shadow-xs border border-slate-200/80">
+                            <div className="flex items-center gap-1.5">
+                                <span className="text-xs text-slate-500 font-medium mr-1">Thinking</span>
                                 {[0, 1, 2].map((i) => (
                                     <div
                                         key={i}
-                                        className="w-2 h-2 bg-indigo-300 rounded-full animate-bounce"
+                                        className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce"
                                         style={{ animationDelay: `${i * 0.15}s` }}
                                     />
                                 ))}
@@ -373,12 +566,13 @@ export default function AIChat({ onClose, onNavigate, fullPage }) {
             </div>
 
             {/* Suggestions */}
-            {messages.length <= 1 && (
-                <div className="px-4 py-2 flex gap-2 overflow-x-auto flex-shrink-0 bg-white border-t border-slate-100">
-                    {suggestions.slice(0, 3).map((s) => (
+            {messages.length <= 2 && (
+                <div className="px-4 py-2 flex gap-2 overflow-x-auto flex-shrink-0 bg-white border-t border-slate-100 no-scrollbar">
+                    {suggestions.map((s) => (
                         <button
                             key={s}
-                            className="flex-shrink-0 text-xs bg-indigo-50 text-indigo-700 font-medium px-3 py-1.5 rounded-full hover:bg-indigo-100 transition-colors cursor-pointer"
+                            type="button"
+                            className="flex-shrink-0 text-xs bg-indigo-50/80 text-indigo-700 font-medium px-3 py-1.5 rounded-full hover:bg-indigo-100 transition-colors cursor-pointer border border-indigo-100"
                             onClick={() => sendMessage(s)}
                         >
                             {s}
@@ -387,18 +581,19 @@ export default function AIChat({ onClose, onNavigate, fullPage }) {
                 </div>
             )}
 
-            {/* Input */}
-            <div className="p-3 bg-white border-t border-slate-100 flex items-center gap-2 flex-shrink-0">
+            {/* Input Form */}
+            <div className="p-3 bg-white border-t border-slate-200/70 flex items-center gap-2 flex-shrink-0">
                 <input
                     type="text"
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && sendMessage(input)}
-                    placeholder="Ask anything about learning or mentors..."
-                    className="flex-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 transition-all"
+                    placeholder="Ask about coding, roadmaps, interview prep..."
+                    className="flex-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-all placeholder:text-slate-400"
                 />
                 <button
-                    className="w-10 h-10 bg-indigo-600 hover:bg-indigo-700 rounded-xl flex items-center justify-center text-white transition-colors flex-shrink-0 disabled:opacity-50 cursor-pointer"
+                    type="button"
+                    className="w-10 h-10 bg-indigo-600 hover:bg-indigo-700 rounded-xl flex items-center justify-center text-white transition-colors flex-shrink-0 disabled:opacity-50 cursor-pointer shadow-xs"
                     onClick={() => sendMessage(input)}
                     disabled={!input.trim() || loading}
                 >
