@@ -19,26 +19,7 @@ dotenv.config();
 
 const app = express();
 
-const corsOptions = {
-    origin: (origin, callback) => {
-        const allowed =
-            !origin ||
-            origin === "https://skill-swap-learn-mentor-grow.vercel.app" ||
-            (
-                origin.startsWith("https://skill-swap-learn-mentor-grow-") &&
-                origin.endsWith(".vercel.app")
-            );
-
-        callback(allowed ? null : new Error("CORS blocked origin"), allowed);
-    },
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-    credentials: true,
-    optionsSuccessStatus: 204
-};
-
-app.use(cors(corsOptions));
-
+app.use(cors());
 app.use(express.json());
 
 // API routes
@@ -85,7 +66,7 @@ const isDirectExecution =
 if (isDirectExecution) {
     const PORT = process.env.PORT || 5000;
 
-        app.listen(PORT, "0.0.0.0", () => {
+    app.listen(PORT, () => {
         console.log(`SkillSwap backend running on port ${PORT}`);
     });
 }
