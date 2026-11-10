@@ -25,7 +25,7 @@ const ROLE_DEFAULT_PAGES = {
 
 const ROLE_ALLOWED_PAGES = {
     admin: new Set(["adminDashboard", "settings", "search", "mentorProfile"]),
-    mentor: new Set(["mentorDashboard", "mentorProfile", "settings", "search"]),
+    mentor: new Set(["mentorDashboard", "mentorProfile", "settings", "search", "onboarding"]),
     student: new Set([
         "menteeDashboard",
         "aiRecs",
@@ -36,7 +36,8 @@ const ROLE_ALLOWED_PAGES = {
         "profile",
         "menteeRequirements",
         "feedback",
-        "settings"
+        "settings",
+        "onboarding"
     ])
 };
 
@@ -44,6 +45,7 @@ const ALL_VALID_PAGES = new Set([
     "landing",
     "login",
     "register",
+    "onboarding",
     "menteeDashboard",
     "aiRecs",
     "mentorProfile",
@@ -129,6 +131,77 @@ function buildUrl(pageName, pageData = {}) {
     return qs ? `${path}?${qs}` : path;
 }
 
+async function getAuthoritativeUserRole(authUser) {
+    if (!authUser) return "student";
+
+    // 1. Query public.users as the trusted database authority
+    try {
+        const { data: profile } = await supabase
+            .from("users")
+            .select("role")
+            .eq("id", authUser.id)
+            .maybeSingle();
+
+        if (profile?.role) {
+            const dbRole = profile.role.toLowerCase().trim();
+            if (dbRole === "admin" || dbRole === "mentor" || dbRole === "student") {
+                return dbRole;
+            }
+        }
+    } catch (e) {
+        console.error("Failed to fetch authoritative user role from database:", e);
+    }
+
+    // 2. Check app_metadata (service-role controlled only, never client-controlled)
+    const appRole = authUser.app_metadata?.role;
+    if (typeof appRole === "string") {
+        const lowerAppRole = appRole.toLowerCase().trim();
+        if (lowerAppRole === "admin" || lowerAppRole === "mentor" || lowerAppRole === "student") {
+            return lowerAppRole;
+        }
+    }
+
+    // 3. Fallback to user_metadata ONLY for non-admin roles (student or mentor)
+    // Client-supplied user_metadata is NEVER permitted to grant 'admin' privileges
+    const metaRole = authUser.user_metadata?.role;
+    if (typeof metaRole === "string") {
+        const lowerMetaRole = metaRole.toLowerCase().trim();
+        if (lowerMetaRole === "mentor") return "mentor";
+        if (lowerMetaRole === "student") return "student";
+    }
+
+    return "student";
+}
+
+async function checkIfUserNeedsOnboarding(authUser, authoritativeRole) {
+    if (!authUser) return false;
+    // Admins NEVER need onboarding
+    if (authoritativeRole === "admin") return false;
+
+    // Check if onboarding was marked completed in user_metadata
+    if (authUser.user_metadata?.onboarding_completed === true) return false;
+
+    // Check if user has an existing database profile with filled details
+    try {
+        const { data: dbUser } = await supabase
+            .from("users")
+            .select("role, org, dept, phone")
+            .eq("id", authUser.id)
+            .maybeSingle();
+
+        if (dbUser?.role === "admin") return false;
+        if (dbUser?.org && (dbUser?.role === "mentor" || dbUser?.dept)) return false;
+    } catch (e) {
+        console.warn("Could not check db profile for onboarding:", e);
+    }
+
+    // Check if user signed up via OAuth (e.g. Google)
+    const isOAuth = authUser.app_metadata?.provider === "google" ||
+        (Array.isArray(authUser.app_metadata?.providers) && authUser.app_metadata.providers.includes("google"));
+
+    return isOAuth;
+}
+
 export default function App() {
     const initialRoute = parseUrl();
     const [page, setPage] = useState(initialRoute.page);
@@ -172,21 +245,16 @@ export default function App() {
                 const { page: requestedPage, pageData: requestedData } = parseUrl();
 
                 if (session?.user) {
-                    let role = session.user.user_metadata?.role || session.user.app_metadata?.role;
-                    if (!role) {
-                        const { data: profile } = await supabase
-                            .from("users")
-                            .select("role")
-                            .eq("id", session.user.id)
-                            .maybeSingle();
-                        role = profile?.role;
-                    }
-                    const normalizedRole = typeof role === "string" ? role.toLowerCase() : "student";
+                    const normalizedRole = await getAuthoritativeUserRole(session.user);
                     const authenticatedUser = { ...session.user, role: normalizedRole };
                     setUser(authenticatedUser);
 
-                    if (PUBLIC_PAGES.has(requestedPage)) {
-                        if (requestedPage === "login" || requestedPage === "register") {
+                    const needsOnboarding = await checkIfUserNeedsOnboarding(session.user, normalizedRole);
+
+                    if (needsOnboarding) {
+                        nav("onboarding", {}, true);
+                    } else if (PUBLIC_PAGES.has(requestedPage) || requestedPage === "onboarding") {
+                        if (requestedPage === "login" || requestedPage === "register" || requestedPage === "onboarding") {
                             const dest = requestedData.redirect && ROLE_ALLOWED_PAGES[normalizedRole]?.has(requestedData.redirect)
                                 ? requestedData.redirect
                                 : ROLE_DEFAULT_PAGES[normalizedRole] || "menteeDashboard";
@@ -242,17 +310,20 @@ export default function App() {
                     nav("landing", {}, true);
                 }
             } else if (event === "SIGNED_IN" && session?.user) {
-                let role = session.user.user_metadata?.role || session.user.app_metadata?.role;
-                if (!role) {
-                    const { data: profile } = await supabase
-                        .from("users")
-                        .select("role")
-                        .eq("id", session.user.id)
-                        .maybeSingle();
-                    role = profile?.role;
-                }
-                const normalizedRole = typeof role === "string" ? role.toLowerCase() : "student";
+                const normalizedRole = await getAuthoritativeUserRole(session.user);
                 setUser({ ...session.user, role: normalizedRole });
+
+                const needsOnboarding = await checkIfUserNeedsOnboarding(session.user, normalizedRole);
+
+                if (needsOnboarding) {
+                    nav("onboarding", {}, true);
+                } else {
+                    const current = parseUrl();
+                    if (PUBLIC_PAGES.has(current.page) || current.page === "onboarding") {
+                        const dest = ROLE_DEFAULT_PAGES[normalizedRole] || "menteeDashboard";
+                        nav(dest, {}, true);
+                    }
+                }
             }
         });
 
@@ -321,6 +392,7 @@ export default function App() {
                                 { label: "Landing", page: "landing" },
                                 { label: "Login", page: "login" },
                                 { label: "Register", page: "register" },
+                                { label: "Onboard", page: "onboarding" },
                                 { label: "Dashboard", page: "menteeDashboard" },
                                 { label: "AI Recs", page: "aiRecs" },
                                 { label: "Mentor Profile", page: "mentorProfile" },
@@ -364,8 +436,9 @@ export default function App() {
             )}
 
             {page === "landing" && <Landing onNavigate={nav} />}
-            {page === "login" && <Auth mode="login" onNavigate={nav} redirect={pageData.redirect} />}
-            {page === "register" && <Auth mode="register" onNavigate={nav} redirect={pageData.redirect} />}
+            {page === "login" && <Auth mode="login" onNavigate={nav} redirect={pageData.redirect} user={user} />}
+            {page === "register" && <Auth mode="register" onNavigate={nav} redirect={pageData.redirect} user={user} />}
+            {page === "onboarding" && <Auth mode="onboarding" onNavigate={nav} redirect={pageData.redirect} user={user} />}
             {page === "menteeDashboard" && <MenteeDashboard onNavigate={nav} />}
             {page === "aiRecs" && <AIRecommendations onNavigate={nav} />}
             {page === "mentorProfile" && (

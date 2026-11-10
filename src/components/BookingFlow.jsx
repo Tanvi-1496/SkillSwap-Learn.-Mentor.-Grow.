@@ -1,6 +1,33 @@
-
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
+
+function normalizeSlotTo24h(slotStr) {
+    if (!slotStr) return "";
+    let trimmed = String(slotStr).trim();
+    if (trimmed.includes(" - ")) {
+        trimmed = trimmed.split(" - ")[0].trim();
+    } else if (trimmed.includes("-")) {
+        trimmed = trimmed.split("-")[0].trim();
+    }
+    const match12 = trimmed.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)$/i);
+    if (match12) {
+        let h = parseInt(match12[1], 10);
+        const m = match12[2];
+        const s = match12[3] || "00";
+        const modifier = match12[4].toUpperCase();
+        if (modifier === "PM" && h < 12) h += 12;
+        if (modifier === "AM" && h === 12) h = 0;
+        return `${String(h).padStart(2, "0")}:${m}:${s}`;
+    }
+    const match24 = trimmed.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+    if (match24) {
+        const h = match24[1].padStart(2, "0");
+        const m = match24[2];
+        const s = match24[3] || "00";
+        return `${h}:${m}:${s}`;
+    }
+    return trimmed;
+}
 
 export default function BookingFlow({ onNavigate, mentorId }) {
     const [mentor, setMentor] = useState(null);
@@ -10,14 +37,16 @@ export default function BookingFlow({ onNavigate, mentorId }) {
     const [selectedTopic, setSelectedTopic] = useState("");
     const [requirements, setRequirements] = useState("");
     const [confirmed, setConfirmed] = useState(false);
+    const [bookedSlots, setBookedSlots] = useState([]);
+    const [bookingError, setBookingError] = useState(null);
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     useEffect(() => {
         if (!mentorId) return;
 
-        fetch(`http://localhost:5000/mentors/${mentorId}`)
+        fetch(`https://skillswap-backend-8g8p.onrender.com/mentors/${mentorId}`)
             .then((res) => res.json())
             .then((data) => {
-                console.log("BOOKING MENTOR:", data);
                 setMentor(data.mentor);
             })
             .catch((error) => {
@@ -70,94 +99,119 @@ export default function BookingFlow({ onNavigate, mentorId }) {
         if (step > 1) setStep(step - 1);
     };
 
-   const getNextDateForDay = (dayName) => {
-    const days = [
-        "Sunday",
-        "Monday",
-        "Tuesday",
-        "Wednesday",
-        "Thursday",
-        "Friday",
-        "Saturday",
-    ];
+    const getNextDateForDay = (dayName) => {
+        const days = [
+            "Sunday",
+            "Monday",
+            "Tuesday",
+            "Wednesday",
+            "Thursday",
+            "Friday",
+            "Saturday",
+        ];
 
-    const today = new Date();
-    const targetDay = days.indexOf(dayName);
-    const currentDay = today.getDay();
+        const today = new Date();
+        const targetDay = days.indexOf(dayName);
+        const currentDay = today.getDay();
 
-    let diff = targetDay - currentDay;
+        let diff = targetDay - currentDay;
 
-    if (diff <= 0) {
-        diff += 7;
-    }
+        if (diff <= 0) {
+            diff += 7;
+        }
 
-    const result = new Date(today);
-    result.setDate(today.getDate() + diff);
+        const result = new Date(today);
+        result.setDate(today.getDate() + diff);
 
-    return result.toISOString().split("T")[0];
-};
+        const y = result.getFullYear();
+        const m = String(result.getMonth() + 1).padStart(2, "0");
+        const d = String(result.getDate()).padStart(2, "0");
+        return `${y}-${m}-${d}`;
+    };
 
-const [bookingError, setBookingError] = useState(null);
-const [isSubmitting, setIsSubmitting] = useState(false);
-
-const handleSubmit = async () => {
-    try {
-        setBookingError(null);
-        setIsSubmitting(true);
-
-        if (!mentorId) {
-            setBookingError("No mentor selected. Please select a mentor before booking.");
-            setIsSubmitting(false);
+    // Whenever selectedDate changes, fetch already-booked slots for that mentor on that date
+    useEffect(() => {
+        if (!mentorId || !selectedDate) {
+            setBookedSlots([]);
             return;
         }
+        const bDate = getNextDateForDay(selectedDate);
+        fetch(`https://skillswap-backend-8g8p.onrender.com/bookings/slots?mentor_id=${mentorId}&date=${bDate}`)
+            .then((res) => (res.ok ? res.json() : null))
+            .then((data) => {
+                if (data?.bookedSlots) {
+                    setBookedSlots(data.bookedSlots);
+                } else {
+                    setBookedSlots([]);
+                }
+            })
+            .catch(() => setBookedSlots([]));
+    }, [mentorId, selectedDate]);
 
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-        const token = session?.access_token;
+    const handleSelectDate = (dayName) => {
+        setSelectedDate(dayName);
+        setSelectedTime("");
+    };
 
-        if (sessionError || !token) {
-            setBookingError("Please log in again before booking.");
+    const handleSubmit = async () => {
+        if (isSubmitting) return;
+
+        try {
+            setBookingError(null);
+            setIsSubmitting(true);
+
+            if (!mentorId) {
+                setBookingError("No mentor selected. Please select a mentor before booking.");
+                setIsSubmitting(false);
+                return;
+            }
+
+            const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+            const token = session?.access_token;
+
+            if (sessionError || !token) {
+                setBookingError("Please log in again before booking.");
+                setIsSubmitting(false);
+                return;
+            }
+
+            const bookingDate = getNextDateForDay(selectedDate);
+
+            const response = await fetch("https://skillswap-backend-8g8p.onrender.com/bookings", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    mentor_id: mentorId,
+                    topic: selectedTopic,
+                    date: bookingDate,
+                    time: selectedTime,
+                }),
+            });
+
+            const data = await response.json();
+
+            if (response.status === 409) {
+                setBookingError(data.error || "This time slot is no longer available. Please choose another time.");
+                setIsSubmitting(false);
+                return;
+            }
+
+            if (!response.ok) {
+                throw new Error(data.error || "Booking failed");
+            }
+
+            setConfirmed(true);
+
+        } catch (error) {
+            console.error("Booking error:", error);
+            setBookingError(error.message || "Failed to create booking.");
+        } finally {
             setIsSubmitting(false);
-            return;
         }
-
-        const bookingDate = getNextDateForDay(selectedDate);
-
-        const response = await fetch("http://localhost:5000/bookings", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "Authorization": `Bearer ${token}`
-            },
-            body: JSON.stringify({
-                mentor_id: mentorId,
-                topic: selectedTopic,
-                date: bookingDate,
-                time: selectedTime,
-            }),
-        });
-
-        const data = await response.json();
-
-        if (response.status === 409) {
-            setBookingError(data.error || "This time slot is no longer available. Please choose another time.");
-            setIsSubmitting(false);
-            return;
-        }
-
-        if (!response.ok) {
-            throw new Error(data.error || "Booking failed");
-        }
-
-        console.log("BOOKING CREATED:", data);
-        setConfirmed(true);
-
-    } catch (error) {
-        console.error("Booking error:", error);
-        setBookingError(error.message || "Failed to create booking.");
-    } finally {
-        setIsSubmitting(false);
-    }
-};
+    };
 
     if (confirmed) {
         return (
@@ -173,7 +227,7 @@ const handleSubmit = async () => {
                     <div className="bg-[#F5F7FC] rounded-2xl p-5 text-left space-y-3 mb-6 border border-[#E5E7EB]">
                         {[
                             { label: "Mentor", val: mentor?.name || "Mentor" },
-                            { label: "Date", val: selectedDate },
+                            { label: "Date", val: `${selectedDate} (${getNextDateForDay(selectedDate)})` },
                             { label: "Time", val: selectedTime },
                             { label: "Topic", val: selectedTopic },
                             { label: "Duration", val: "60 minutes" },
@@ -187,13 +241,13 @@ const handleSubmit = async () => {
                     </div>
                     <div className="flex gap-3">
                         <button
-                            className="flex-1 bg-[#4F46E5] hover:bg-[#4338CA] text-white font-semibold py-3 rounded-xl transition-colors shadow-xs text-sm"
+                            className="flex-1 bg-[#4F46E5] hover:bg-[#4338CA] text-white font-semibold py-3 rounded-xl transition-colors shadow-xs text-sm cursor-pointer"
                             onClick={() => onNavigate("bookings")}
                         >
                             View My Bookings
                         </button>
                         <button
-                            className="flex-1 border border-[#E5E7EB] bg-white hover:bg-[#F5F7FC] text-[#172033] font-semibold py-3 rounded-xl transition-colors text-sm"
+                            className="flex-1 border border-[#E5E7EB] bg-white hover:bg-[#F5F7FC] text-[#172033] font-semibold py-3 rounded-xl transition-colors text-sm cursor-pointer"
                             onClick={() => onNavigate("menteeDashboard")}
                         >
                             Return to Dashboard
@@ -215,7 +269,7 @@ const handleSubmit = async () => {
                         </div>
                         <button
                             onClick={() => onNavigate("search")}
-                            className="text-[#718096] hover:text-[#172033] text-sm font-semibold px-3 py-1.5 rounded-lg hover:bg-[#F5F7FC] transition-colors border border-transparent hover:border-[#E5E7EB]"
+                            className="text-[#718096] hover:text-[#172033] text-sm font-semibold px-3 py-1.5 rounded-lg hover:bg-[#F5F7FC] transition-colors border border-transparent hover:border-[#E5E7EB] cursor-pointer"
                         >
                             ✕ Cancel
                         </button>
@@ -227,7 +281,7 @@ const handleSubmit = async () => {
                                 <span>⚠️</span>
                                 <span>{bookingError}</span>
                             </div>
-                            <button onClick={() => setBookingError(null)} className="text-xs font-bold text-rose-600 hover:text-rose-800">
+                            <button onClick={() => setBookingError(null)} className="text-xs font-bold text-rose-600 hover:text-rose-800 cursor-pointer">
                                 Dismiss
                             </button>
                         </div>
@@ -275,15 +329,16 @@ const handleSubmit = async () => {
                                             <button
                                                 key={day.day}
                                                 type="button"
-                                                onClick={() => setSelectedDate(day.day)}
-                                                className={`rounded-2xl border p-4 text-left transition ${
+                                                onClick={() => handleSelectDate(day.day)}
+                                                className={`rounded-2xl border p-4 text-left transition cursor-pointer ${
                                                     selectedDate === day.day
                                                         ? "border-[#4F46E5] bg-[#EEF0FF] text-[#4F46E5] shadow-xs"
                                                         : "border-[#E5E7EB] bg-white hover:border-slate-300 text-[#172033]"
                                                 }`}
                                             >
                                                 <div className="font-semibold">{day.day}</div>
-                                                <div className="text-sm text-[#718096]">{day.slots?.length || 0} slots available</div>
+                                                <div className="text-xs text-[#718096] mt-0.5">{getNextDateForDay(day.day)}</div>
+                                                <div className="text-sm text-[#718096] mt-1">{day.slots?.length || 0} slots available</div>
                                             </button>
                                         ))
                                     ) : (
@@ -302,20 +357,26 @@ const handleSubmit = async () => {
                                     {availableDays
                                         .filter((day) => day.day === selectedDate)
                                         .flatMap((day) => day.slots || [])
-                                        .map((slot) => (
-                                            <button
-                                                key={slot}
-                                                type="button"
-                                                onClick={() => setSelectedTime(slot)}
-                                                className={`rounded-xl border px-4 py-3 text-sm font-medium transition ${
-                                                    selectedTime === slot
-                                                        ? "border-[#4F46E5] bg-[#EEF0FF] text-[#4F46E5] font-semibold"
-                                                        : "border-[#E5E7EB] bg-white hover:border-slate-300 text-[#172033]"
-                                                }`}
-                                            >
-                                                {slot}
-                                            </button>
-                                        ))}
+                                        .map((slot) => {
+                                            const isBooked = bookedSlots.includes(normalizeSlotTo24h(slot));
+                                            return (
+                                                <button
+                                                    key={slot}
+                                                    type="button"
+                                                    disabled={isBooked}
+                                                    onClick={() => setSelectedTime(slot)}
+                                                    className={`rounded-xl border px-4 py-3 text-sm font-medium transition ${
+                                                        isBooked
+                                                            ? "border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed opacity-60 line-through"
+                                                            : selectedTime === slot
+                                                            ? "border-[#4F46E5] bg-[#EEF0FF] text-[#4F46E5] font-semibold cursor-pointer"
+                                                            : "border-[#E5E7EB] bg-white hover:border-slate-300 text-[#172033] cursor-pointer"
+                                                    }`}
+                                                >
+                                                    {slot} {isBooked && "(Booked)"}
+                                                </button>
+                                            );
+                                        })}
                                 </div>
                                 {!availableDays.some((day) => day.day === selectedDate) && (
                                     <p className="text-sm text-[#718096] mt-3">Please select a date first.</p>
@@ -334,7 +395,7 @@ const handleSubmit = async () => {
                                             key={topic}
                                             type="button"
                                             onClick={() => setSelectedTopic(topic)}
-                                            className={`rounded-2xl border p-4 text-left transition ${
+                                            className={`rounded-2xl border p-4 text-left transition cursor-pointer ${
                                                 selectedTopic === topic
                                                     ? "border-[#4F46E5] bg-[#EEF0FF] text-[#4F46E5] shadow-xs"
                                                     : "border-[#E5E7EB] bg-white hover:border-slate-300 text-[#172033]"
@@ -375,7 +436,7 @@ const handleSubmit = async () => {
                                     </div>
                                     <div className="flex items-center justify-between">
                                         <span className="text-[#718096]">Date</span>
-                                        <span className="font-semibold text-[#172033]">{selectedDate}</span>
+                                        <span className="font-semibold text-[#172033]">{selectedDate} ({getNextDateForDay(selectedDate)})</span>
                                     </div>
                                     <div className="flex items-center justify-between">
                                         <span className="text-[#718096]">Time</span>
@@ -394,8 +455,8 @@ const handleSubmit = async () => {
                         <button
                             type="button"
                             onClick={handleBack}
-                            disabled={step === 1}
-                            className="px-5 py-3 rounded-xl border border-[#E5E7EB] bg-white text-[#172033] font-medium hover:bg-[#F5F7FC] disabled:opacity-40 disabled:cursor-not-allowed transition"
+                            disabled={step === 1 || isSubmitting}
+                            className="px-5 py-3 rounded-xl border border-[#E5E7EB] bg-white text-[#172033] font-medium hover:bg-[#F5F7FC] disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer"
                         >
                             Back
                         </button>
@@ -405,17 +466,25 @@ const handleSubmit = async () => {
                                 type="button"
                                 onClick={handleNext}
                                 disabled={!canNext()}
-                                className="px-5 py-3 rounded-xl bg-[#4F46E5] hover:bg-[#4338CA] text-white font-medium disabled:opacity-50 disabled:cursor-not-allowed transition shadow-xs"
+                                className="px-5 py-3 rounded-xl bg-[#4F46E5] hover:bg-[#4338CA] text-white font-medium disabled:opacity-50 disabled:cursor-not-allowed transition shadow-xs cursor-pointer"
                             >
                                 Next
                             </button>
                         ) : (
                             <button
                                 type="button"
+                                disabled={isSubmitting}
                                 onClick={handleSubmit}
-                                className="px-5 py-3 rounded-xl bg-[#4F46E5] hover:bg-[#4338CA] text-white font-medium transition shadow-xs"
+                                className="px-5 py-3 rounded-xl bg-[#4F46E5] hover:bg-[#4338CA] text-white font-medium disabled:opacity-50 disabled:cursor-not-allowed transition shadow-xs cursor-pointer flex items-center gap-2"
                             >
-                                Confirm Booking
+                                {isSubmitting ? (
+                                    <>
+                                        <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                        <span>Confirming...</span>
+                                    </>
+                                ) : (
+                                    "Confirm Booking"
+                                )}
                             </button>
                         )}
                     </div>

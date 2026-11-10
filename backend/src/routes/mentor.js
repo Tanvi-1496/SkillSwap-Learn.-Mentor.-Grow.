@@ -21,8 +21,8 @@ router.get("/", async (req, res) => {
     try {
         const { skill, type, rating } = req.query;
 
-        // Get mentor profiles
-        const { data: mentorProfiles, error } = await supabase
+        // Get mentor profiles - only approved mentors are publicly discoverable
+        let { data: rawProfiles, error } = await supabase
             .from("mentor_profiles")
             .select("*");
 
@@ -31,6 +31,10 @@ router.get("/", async (req, res) => {
                 error: error.message
             });
         }
+
+        const mentorProfiles = (rawProfiles || []).filter((m) =>
+            m.verification_status === "approved" || (!m.verification_status && m.verified === true)
+        );
 
         const mentorIds = mentorProfiles.map(mentor => mentor.user_id);
 
@@ -616,7 +620,12 @@ router.get("/:id", async (req, res) => {
             });
         }
 
-        if (!mentorProfile) {
+        const isApproved = mentorProfile && (
+            mentorProfile.verification_status === "approved" ||
+            (!mentorProfile.verification_status && mentorProfile.verified === true)
+        );
+
+        if (!mentorProfile || !isApproved) {
             return res.status(404).json({
                 error: "Mentor not found"
             });

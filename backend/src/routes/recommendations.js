@@ -61,26 +61,35 @@ router.get("/", authMiddleware, async (req, res) => {
         });
     }
 
-    // Attach mentor names from the existing users table.
+    // Attach mentor names from the existing users table and filter approved mentors only
     const mentorIds = recommendations.map(item => item.profile_id);
 
-    let users = [];
-
-    const { data: userData, error: userError } = await supabase
-        .from("users")
-        .select("id, name")
-        .in("id", mentorIds);
+    const [
+        { data: userData, error: userError },
+        { data: mentorProfilesData, error: mpError }
+    ] = await Promise.all([
+        supabase.from("users").select("id, name").in("id", mentorIds),
+        supabase.from("mentor_profiles").select("user_id, verification_status, verified").in("user_id", mentorIds)
+    ]);
 
     if (userError) {
-        console.error(
-            "Recommendation name lookup error:",
-            userError.message
-        );
-    } else {
-        users = userData || [];
+        console.error("Recommendation name lookup error:", userError.message);
+    }
+    if (mpError) {
+        console.error("Recommendation status lookup error:", mpError.message);
     }
 
-    const mentors = recommendations.map(item => {
+    const users = userData || [];
+    const approvedMentorIds = new Set(
+        (mentorProfilesData || [])
+            .filter((mp) => mp.verification_status === "approved" || (!mp.verification_status && mp.verified === true))
+            .map((mp) => mp.user_id)
+    );
+
+    // Only include mentors who have been approved
+    const eligibleRecommendations = recommendations.filter(item => approvedMentorIds.has(item.profile_id));
+
+    const mentors = eligibleRecommendations.map(item => {
         const user = users.find(u => u.id === item.profile_id);
 
         return {

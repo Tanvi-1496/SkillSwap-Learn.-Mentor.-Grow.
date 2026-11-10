@@ -119,7 +119,7 @@ export default function MenteeDashboard({ onNavigate }) {
             }
 
             try {
-                const response = await fetch("http://localhost:5000/profile", {
+                const response = await fetch("https://skillswap-backend-8g8p.onrender.com/profile", {
                     headers: {
                         Authorization: `Bearer ${token}`
                     }
@@ -138,7 +138,7 @@ export default function MenteeDashboard({ onNavigate }) {
 
             // Fetch live mentors for recommended section
             try {
-                fetch("http://localhost:5000/mentors")
+                fetch("https://skillswap-backend-8g8p.onrender.com/mentors")
                     .then((r) => r.json())
                     .then((d) => {
                         if (d.mentors && d.mentors.length > 0) {
@@ -165,7 +165,7 @@ export default function MenteeDashboard({ onNavigate }) {
 
             // Fetch live upcoming confirmed bookings
             try {
-                const bRes = await fetch("http://localhost:5000/bookings", {
+                const bRes = await fetch("https://skillswap-backend-8g8p.onrender.com/bookings", {
                     headers: {
                         Authorization: `Bearer ${token}`
                     }

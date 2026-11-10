@@ -55,7 +55,7 @@ export default function MenteeRequirements({ onNavigate }) {
             }
 
             const response = await fetch(
-                "http://localhost:5000/profile",
+                "https://skillswap-backend-8g8p.onrender.com/profile",
                 {
                     method: "PUT",
                     headers: {

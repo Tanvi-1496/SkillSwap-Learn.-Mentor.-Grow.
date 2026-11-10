@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
+import SessionDetailsModal from "./SessionDetailsModal";
 
 const navItems = [
     { id: "dashboard", label: "Dashboard", icon: "🏠" },
@@ -169,6 +170,8 @@ export default function MentorDashboard({ onNavigate, initialTab }) {
     const [availFeedback, setAvailFeedback] = useState(null);
     const [bookingFeedback, setBookingFeedback] = useState(null);
     const [mentorReviews, setMentorReviews] = useState([]);
+    const [selectedSessionForModal, setSelectedSessionForModal] = useState(null);
+    const [currentMentorUser, setCurrentMentorUser] = useState(null);
 
     const loadMentorData = async () => {
         try {
@@ -179,7 +182,7 @@ export default function MentorDashboard({ onNavigate, initialTab }) {
             const token = session?.access_token;
             if (!token) return;
 
-            const response = await fetch("http://localhost:5000/mentors/me", {
+            const response = await fetch("https://skillswap-backend-8g8p.onrender.com/mentors/me", {
                 headers: {
                     Authorization: `Bearer ${token}`
                 }
@@ -216,7 +219,7 @@ export default function MentorDashboard({ onNavigate, initialTab }) {
             // Also load reviews for this mentor
             if (session?.user?.id) {
                 try {
-                    const revRes = await fetch(`http://localhost:5000/mentors/${session.user.id}`);
+                    const revRes = await fetch(`https://skillswap-backend-8g8p.onrender.com/mentors/${session.user.id}`);
                     if (revRes.ok) {
                         const revData = await revRes.json();
                         if (Array.isArray(revData.mentor?.reviews)) {
@@ -241,7 +244,7 @@ export default function MentorDashboard({ onNavigate, initialTab }) {
             const token = session?.access_token;
             if (!token) return;
 
-            const response = await fetch("http://localhost:5000/bookings", {
+            const response = await fetch("https://skillswap-backend-8g8p.onrender.com/bookings", {
                 headers: {
                     Authorization: `Bearer ${token}`
                 }
@@ -282,7 +285,7 @@ export default function MentorDashboard({ onNavigate, initialTab }) {
                 return;
             }
 
-            const response = await fetch("http://localhost:5000/mentors/me/skills", {
+            const response = await fetch("https://skillswap-backend-8g8p.onrender.com/mentors/me/skills", {
                 method: "PUT",
                 headers: {
                     "Content-Type": "application/json",
@@ -475,7 +478,7 @@ export default function MentorDashboard({ onNavigate, initialTab }) {
                 slots: avail[d].active ? (avail[d].slots || []) : []
             }));
 
-            const response = await fetch("http://localhost:5000/mentors/me/availability", {
+            const response = await fetch("https://skillswap-backend-8g8p.onrender.com/mentors/me/availability", {
                 method: "PUT",
                 headers: {
                     "Content-Type": "application/json",
@@ -527,7 +530,7 @@ export default function MentorDashboard({ onNavigate, initialTab }) {
                 return;
             }
 
-            const response = await fetch(`http://localhost:5000/bookings/${bookingId}`, {
+            const response = await fetch(`https://skillswap-backend-8g8p.onrender.com/bookings/${bookingId}`, {
                 method: "PATCH",
                 headers: {
                     "Content-Type": "application/json",
@@ -871,6 +874,15 @@ export default function MentorDashboard({ onNavigate, initialTab }) {
                                                 <div className="bg-indigo-50 rounded-xl px-3 py-2 text-sm text-indigo-700 font-medium mt-3">
                                                     📌 {s.topic}
                                                 </div>
+                                                <div className="mt-3 flex gap-2">
+                                                    <button
+                                                        onClick={() => setSelectedSessionForModal(s)}
+                                                        className="text-xs font-semibold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/60 px-3.5 py-1.5 rounded-xl transition-colors cursor-pointer flex items-center gap-1.5"
+                                                    >
+                                                        <span>🎙️</span>
+                                                        <span>Audio & Transcript</span>
+                                                    </button>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -904,6 +916,15 @@ export default function MentorDashboard({ onNavigate, initialTab }) {
                                                 </div>
                                                 <div className="bg-slate-50 rounded-xl px-3 py-2 text-sm text-slate-700 font-medium mt-3">
                                                     📌 {s.topic}
+                                                </div>
+                                                <div className="mt-3 flex gap-2">
+                                                    <button
+                                                        onClick={() => setSelectedSessionForModal(s)}
+                                                        className="text-xs font-semibold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/60 px-3.5 py-1.5 rounded-xl transition-colors cursor-pointer flex items-center gap-1.5"
+                                                    >
+                                                        <span>🎙️</span>
+                                                        <span>Audio & Transcript</span>
+                                                    </button>
                                                 </div>
                                             </div>
                                         </div>
@@ -1289,5 +1310,13 @@ export default function MentorDashboard({ onNavigate, initialTab }) {
           )}
         </div>
       </main>
-    </div>);
+        {selectedSessionForModal && (
+                <SessionDetailsModal
+                    booking={selectedSessionForModal}
+                    currentUser={currentMentorUser}
+                    onClose={() => setSelectedSessionForModal(null)}
+                    onBookingUpdated={loadBookings}
+                />
+            )}
+        </div>);
 }

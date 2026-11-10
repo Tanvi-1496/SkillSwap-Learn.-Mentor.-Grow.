@@ -59,7 +59,7 @@ export default function Feedback({ onNavigate, initialBookingId }) {
                 return;
             }
 
-            const response = await fetch("http://localhost:5000/reviews/eligible", {
+            const response = await fetch("https://skillswap-backend-8g8p.onrender.com/reviews/eligible", {
                 headers: {
                     Authorization: `Bearer ${session.access_token}`
                 }
@@ -130,7 +130,7 @@ export default function Feedback({ onNavigate, initialBookingId }) {
                 return;
             }
 
-            const response = await fetch("http://localhost:5000/reviews", {
+            const response = await fetch("https://skillswap-backend-8g8p.onrender.com/reviews", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",

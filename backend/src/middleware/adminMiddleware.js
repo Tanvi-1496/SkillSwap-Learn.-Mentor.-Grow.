@@ -1,15 +1,11 @@
+
 import supabase from "../config/supabase.js";
 
 /**
- * Admin authorization middleware.
- * 1. Authenticates the request via Supabase Auth token.
- * 2. Retrieves the authenticated user's ID.
- * 3. Looks up the user's role in the trusted public.users database table.
- * 4. Requires role === "admin".
- * 5. Returns 403 Forbidden for students, mentors, or any non-admin users.
- * 6. Never trusts any role supplied by the frontend client.
+ * Admin Authorization Middleware
+ * Verifies Supabase JWT and trusted database role.
  */
-const adminMiddleware = async (req, res, next) => {
+export const adminMiddleware = async (req, res, next) => {
     try {
         const authHeader = req.headers.authorization;
 
@@ -21,51 +17,59 @@ const adminMiddleware = async (req, res, next) => {
 
         const token = authHeader.split(" ")[1];
 
-        // 1. Authenticate request using Supabase Auth (verifies JWT signature and expiry)
-        const { data, error: authError } = await supabase.auth.getUser(token);
+        // Verify Supabase Auth JWT.
+        const { data: authData, error: authError } =
+            await supabase.auth.getUser(token);
 
-        if (authError || !data?.user) {
+        if (authError || !authData?.user) {
             return res.status(401).json({
                 error: "Invalid or expired authorization token"
             });
         }
 
-        const userId = data.user.id;
+        const userId = authData.user.id;
 
-        // 2. Query public.users using backend service role client (trusted source of truth)
+        // Check trusted database role.
         const { data: userProfile, error: profileError } = await supabase
             .from("users")
-            .select("id, name, email, role, org, dept, phone")
+            .select("id, name, email, role")
             .eq("id", userId)
             .maybeSingle();
 
         if (profileError) {
-            console.error("Error looking up user role for admin check:", profileError);
+            console.error("Admin role lookup error:", profileError);
             return res.status(500).json({
-                error: "Failed to verify admin status"
+                error: "Failed to verify administrative privileges"
             });
         }
 
-        // 3. Strict verification: role must strictly equal 'admin'
-        if (!userProfile || userProfile.role !== "admin") {
+        if (
+            !userProfile ||
+            typeof userProfile.role !== "string" ||
+            userProfile.role.toLowerCase() !== "admin"
+        ) {
             return res.status(403).json({
-                error: "Access denied. Admin role required."
+                error: "Access denied. Administrator privileges required."
             });
         }
 
-        // 4. Attach verified admin user record to request
         req.user = {
-            ...data.user,
-            ...userProfile
+            ...authData.user,
+            ...userProfile,
+            role: "admin",
+            isAdmin: true
         };
 
         next();
     } catch (error) {
         console.error("adminMiddleware unexpected error:", error);
-        res.status(500).json({
+
+        return res.status(500).json({
             error: "Authentication process failed"
         });
     }
 };
 
+// Support both named and default imports.
+export const requireAdmin = adminMiddleware;
 export default adminMiddleware;
