@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { supabase } from "../lib/supabase";
+import { API_URL } from "../lib/api";
 
 const SUPPORTED_EXTENSIONS = [".wav", ".mp3", ".m4a", ".aac", ".flac", ".ogg"];
 const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024; // 25 MB
@@ -50,7 +51,7 @@ export default function AudioUpload({ booking, currentUser, onUploadSuccess }) {
             const token = session?.access_token;
             if (!token) return;
 
-            const res = await fetch(`https://skillswap-backend-8g8p.onrender.com/bookings/${booking.id}/transcript`, {
+            const res = await fetch(`${API_URL}/bookings/${booking.id}/transcript`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
 
@@ -134,7 +135,7 @@ export default function AudioUpload({ booking, currentUser, onUploadSuccess }) {
                 return;
             }
 
-            const res = await fetch(`https://skillswap-backend-8g8p.onrender.com/bookings/${booking.id}/consent`, {
+            const res = await fetch(`${API_URL}/bookings/${booking.id}/consent`, {
                 method: "POST",
                 headers: {
                     Authorization: `Bearer ${token}`,
@@ -202,7 +203,7 @@ export default function AudioUpload({ booking, currentUser, onUploadSuccess }) {
 
             setUploadProgress("Transcribing audio with Gnani.ai Prisma v3.0...");
 
-            const response = await fetch(`https://skillswap-backend-8g8p.onrender.com/bookings/${booking.id}/audio`, {
+            const response = await fetch(`${API_URL}/bookings/${booking.id}/audio`, {
                 method: "POST",
                 headers: {
                     Authorization: `Bearer ${token}`

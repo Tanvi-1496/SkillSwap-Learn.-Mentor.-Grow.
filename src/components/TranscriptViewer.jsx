@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabase";
+import { API_URL } from "../lib/api";
 
 const LANGUAGE_LABELS = {
     "en-IN": "English (India)",
@@ -44,7 +45,7 @@ export default function TranscriptViewer({ bookingId, initialTranscript, onRefre
                 return;
             }
 
-            const response = await fetch(`https://skillswap-backend-8g8p.onrender.com/bookings/${bookingId}/transcript`, {
+            const response = await fetch(`${API_URL}/bookings/${bookingId}/transcript`, {
                 headers: {
                     Authorization: `Bearer ${token}`
                 }
@@ -82,7 +83,7 @@ export default function TranscriptViewer({ bookingId, initialTranscript, onRefre
                     const token = session?.access_token;
                     if (!token) return;
 
-                    const res = await fetch(`https://skillswap-backend-8g8p.onrender.com/chatbot/session-insights/${bookingId}`, {
+                    const res = await fetch(`${API_URL}/chatbot/session-insights/${bookingId}`, {
                         headers: { Authorization: `Bearer ${token}` }
                     });
                     if (res.ok) {
@@ -144,7 +145,7 @@ export default function TranscriptViewer({ bookingId, initialTranscript, onRefre
                 return;
             }
 
-            const response = await fetch(`https://skillswap-backend-8g8p.onrender.com/chatbot/session-insights/${bookingId}`, {
+            const response = await fetch(`${API_URL}/chatbot/session-insights/${bookingId}`, {
                 method: "POST",
                 headers: {
                     Authorization: `Bearer ${token}`
@@ -390,7 +391,11 @@ export default function TranscriptViewer({ bookingId, initialTranscript, onRefre
                     ) : (
                         <div className="flex items-center gap-2">
                             <span className="text-[11px] font-medium bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-full border border-indigo-100">
-                                {insights.cached ? "⚡ Instant Cached Digest" : "✨ Generated with Evon 30B"}
+                                {insights.cached
+                                    ? `⚡ Instant Cached Digest${insights.is_mock ? " (Simulated)" : ""}`
+                                    : insights.is_mock
+                                        ? "🧪 Generated with Evon 30B (Simulated)"
+                                        : "✨ Generated with Evon 30B"}
                             </span>
                             <button
                                 type="button"

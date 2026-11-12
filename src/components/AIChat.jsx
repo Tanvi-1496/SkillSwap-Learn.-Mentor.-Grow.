@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { supabase } from "../lib/supabase";
+import { API_URL } from "../lib/api";
 
 const suggestions = [
     "Create a personalized learning roadmap",
@@ -301,7 +302,7 @@ export default function AIChat({ onClose, onNavigate, fullPage }) {
 
                 // 1. Fetch Profile for Context
                 try {
-                    const profRes = await fetch("https://skillswap-backend-8g8p.onrender.com/profile", {
+                    const profRes = await fetch(`${API_URL}/profile`, {
                         headers: { Authorization: `Bearer ${token}` }
                     });
                     if (profRes.ok && isMounted) {
@@ -324,7 +325,7 @@ export default function AIChat({ onClose, onNavigate, fullPage }) {
 
                 // 2. Load Persistent Conversation History from Backend
                 try {
-                    const histRes = await fetch("https://skillswap-backend-8g8p.onrender.com/chatbot/history", {
+                    const histRes = await fetch(`${API_URL}/chatbot/history`, {
                         headers: { Authorization: `Bearer ${token}` }
                     });
                     if (histRes.ok && isMounted) {
@@ -369,7 +370,7 @@ export default function AIChat({ onClose, onNavigate, fullPage }) {
             } = await supabase.auth.getSession();
             const token = session?.access_token;
             if (token) {
-                await fetch("https://skillswap-backend-8g8p.onrender.com/chatbot/history", {
+                await fetch(`${API_URL}/chatbot/history`, {
                     method: "DELETE",
                     headers: { Authorization: `Bearer ${token}` }
                 });
@@ -396,13 +397,13 @@ export default function AIChat({ onClose, onNavigate, fullPage }) {
             const token = session?.access_token;
 
             if (token) {
-                // Send up to 8 recent history items for conversational context
-                const historyContext = updatedMessages.slice(-8).map((m) => ({
+                // Send up to 8 prior turns (excluding current user message) as conversational context
+                const historyContext = messages.slice(-8).map((m) => ({
                     role: m.role === "ai" ? "assistant" : "user",
                     content: m.content
                 }));
 
-                const response = await fetch("https://skillswap-backend-8g8p.onrender.com/chatbot/message", {
+                const response = await fetch(`${API_URL}/chatbot/message`, {
                     method: "POST",
                     headers: {
                         "Content-Type": "application/json",
@@ -416,19 +417,25 @@ export default function AIChat({ onClose, onNavigate, fullPage }) {
 
                 if (response.ok) {
                     const result = await response.json();
-                    if (result.success && result.message) {
-                        if (result.model) {
+                    const replyText = result.reply || result.message?.content;
+                    const replyType = result.message_type || result.message?.type || "text";
+                    const replyMetadata = result.metadata || result.message?.metadata || {};
+
+                    if (result.success && replyText) {
+                        if (result.is_mock) {
+                            setModelBadge("Evon 30B (Simulated)");
+                        } else if (result.model) {
                             setModelBadge(result.model.includes("30B") ? "Gnani Evon 30B" : result.model);
                         }
 
                         const aiMsg = {
                             role: "ai",
-                            content: result.message.content,
-                            type: result.message.type || "text",
-                            metadata: result.message.metadata || {},
+                            content: replyText,
+                            type: replyType,
+                            metadata: replyMetadata,
                             roadmapConfig:
-                                result.message.type === "roadmap"
-                                    ? (result.message.metadata?.roadmapConfig || getRoadmapConfig(studentProfile))
+                                replyType === "roadmap"
+                                    ? (replyMetadata?.roadmapConfig || getRoadmapConfig(studentProfile))
                                     : null,
                             model: result.model,
                             is_mock: result.is_mock
@@ -511,7 +518,16 @@ export default function AIChat({ onClose, onNavigate, fullPage }) {
                         >
                             {msg.type === "roadmap" ? (
                                 <div>
-                                    <div className="font-bold text-indigo-700 mb-2">{msg.content}</div>
+                                    {msg.content && msg.content.length > 100 ? (
+                                        <div className="mb-3 pb-3 border-b border-slate-100">
+                                            <FormattedContent content={msg.content} onNavigate={onNavigate} />
+                                        </div>
+                                    ) : (
+                                        <div className="font-bold text-indigo-700 mb-2">{msg.content}</div>
+                                    )}
+                                    <div className="text-[11px] font-bold uppercase tracking-wider text-indigo-600 mb-1.5">
+                                        Weekly Milestone Tracker
+                                    </div>
                                     <div className="space-y-1.5 my-2">
                                         {(msg.roadmapConfig?.items || getRoadmapConfig(studentProfile).items).map((item, j) => (
                                             <div key={j} className="flex items-center gap-2.5">

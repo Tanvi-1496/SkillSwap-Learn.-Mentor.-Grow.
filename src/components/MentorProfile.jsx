@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { API_URL } from "../lib/api";
 
 export default function MentorProfile({
     onNavigate,
@@ -136,7 +137,7 @@ export default function MentorProfile({
     useEffect(() => {
         if (!mentorId) return;
 
-        fetch(`https://skillswap-backend-8g8p.onrender.com/mentors/${mentorId}`)
+        fetch(`${API_URL}/mentors/${mentorId}`)
             .then((res) => res.json())
             .then((data) => {
                 setMentor(data.mentor);

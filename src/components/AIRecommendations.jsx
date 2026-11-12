@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
+import { API_URL } from "../lib/api";
 
 const avatarColors = [
     "bg-indigo-600",
@@ -186,7 +187,7 @@ export default function AIRecommendations({ onNavigate }) {
                 }
 
                 const response = await fetch(
-                    "https://skillswap-backend-8g8p.onrender.com/recommendations",
+                    `${API_URL}/recommendations`,
                     {
                         headers: {
                             Authorization: `Bearer ${token}`

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
+import { API_URL } from "../lib/api";
 import SessionDetailsModal from "./SessionDetailsModal";
 
 const navItems = [
@@ -182,7 +183,7 @@ export default function MentorDashboard({ onNavigate, initialTab }) {
             const token = session?.access_token;
             if (!token) return;
 
-            const response = await fetch("https://skillswap-backend-8g8p.onrender.com/mentors/me", {
+            const response = await fetch(`${API_URL}/mentors/me`, {
                 headers: {
                     Authorization: `Bearer ${token}`
                 }
@@ -219,7 +220,7 @@ export default function MentorDashboard({ onNavigate, initialTab }) {
             // Also load reviews for this mentor
             if (session?.user?.id) {
                 try {
-                    const revRes = await fetch(`https://skillswap-backend-8g8p.onrender.com/mentors/${session.user.id}`);
+                    const revRes = await fetch(`${API_URL}/mentors/${session.user.id}`);
                     if (revRes.ok) {
                         const revData = await revRes.json();
                         if (Array.isArray(revData.mentor?.reviews)) {
@@ -244,7 +245,7 @@ export default function MentorDashboard({ onNavigate, initialTab }) {
             const token = session?.access_token;
             if (!token) return;
 
-            const response = await fetch("https://skillswap-backend-8g8p.onrender.com/bookings", {
+            const response = await fetch(`${API_URL}/bookings`, {
                 headers: {
                     Authorization: `Bearer ${token}`
                 }
@@ -285,7 +286,7 @@ export default function MentorDashboard({ onNavigate, initialTab }) {
                 return;
             }
 
-            const response = await fetch("https://skillswap-backend-8g8p.onrender.com/mentors/me/skills", {
+            const response = await fetch(`${API_URL}/mentors/me/skills`, {
                 method: "PUT",
                 headers: {
                     "Content-Type": "application/json",
@@ -478,7 +479,7 @@ export default function MentorDashboard({ onNavigate, initialTab }) {
                 slots: avail[d].active ? (avail[d].slots || []) : []
             }));
 
-            const response = await fetch("https://skillswap-backend-8g8p.onrender.com/mentors/me/availability", {
+            const response = await fetch(`${API_URL}/mentors/me/availability`, {
                 method: "PUT",
                 headers: {
                     "Content-Type": "application/json",
@@ -530,7 +531,7 @@ export default function MentorDashboard({ onNavigate, initialTab }) {
                 return;
             }
 
-            const response = await fetch(`https://skillswap-backend-8g8p.onrender.com/bookings/${bookingId}`, {
+            const response = await fetch(`${API_URL}/bookings/${bookingId}`, {
                 method: "PATCH",
                 headers: {
                     "Content-Type": "application/json",

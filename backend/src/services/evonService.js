@@ -8,17 +8,61 @@
  * Hybrid Mamba-Transformer Mixture-of-Experts (MoE, 30B total / 3.5B active parameters per token).
  */
 
-const EVON_API_URL = process.env.EVON_API_URL || "";
-const EVON_API_KEY = (process.env.EVON_API_KEY || "").trim();
+import dotenv from "dotenv";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config();
+dotenv.config({ path: path.resolve(__dirname, "../../.env") });
+
 export const DEFAULT_EVON_MODEL = process.env.EVON_MODEL || "gnani/gnani-evon-v3.3-30B-A3B";
-const REQUEST_TIMEOUT_MS = parseInt(process.env.EVON_TIMEOUT_MS || "30000", 10); // 30 seconds
+
+/**
+ * Normalizes an OpenAI-compatible inference URL so either a base `/v1` URL
+ * or full `/v1/chat/completions` URL works seamlessly.
+ * @param {string} rawUrl
+ * @returns {string}
+ */
+function normalizeEvonChatUrl(rawUrl = "") {
+    const trimmed = rawUrl.trim();
+    if (!trimmed) return "";
+    if (/\/v1\/?$/i.test(trimmed)) {
+        return `${trimmed.replace(/\/+$/, "")}/chat/completions`;
+    }
+    return trimmed;
+}
+
+/**
+ * Reads Evon configuration dynamically from process.env so changes from dotenv
+ * or runtime environment overrides are always respected.
+ */
+export function getEvonConfig() {
+    const apiUrl = normalizeEvonChatUrl(process.env.EVON_API_URL || "");
+    const apiKey = (process.env.EVON_API_KEY || "").trim();
+    const model = (process.env.EVON_MODEL || DEFAULT_EVON_MODEL).trim();
+    const parsedTimeout = parseInt(process.env.EVON_TIMEOUT_MS || "30000", 10);
+    const timeoutMs = Number.isFinite(parsedTimeout) && parsedTimeout > 0 ? parsedTimeout : 30000;
+
+    return {
+        apiUrl,
+        apiKey,
+        model,
+        timeoutMs
+    };
+}
 
 /**
  * Checks if live Evon 30B inference credentials and endpoint are configured.
+ * Rejects empty values or untouched .env.example placeholders.
  * @returns {boolean}
  */
 export function isEvonConfigured() {
-    return Boolean(EVON_API_URL && EVON_API_KEY);
+    const { apiUrl, apiKey } = getEvonConfig();
+    if (!apiUrl || !apiKey) return false;
+    if (apiKey === "your-evon-api-key") return false;
+    if (apiUrl.includes("your-evon-inference-endpoint.com")) return false;
+    return true;
 }
 
 /**
@@ -192,11 +236,13 @@ export async function generateEvonChatCompletion({
     temperature = 0.7,
     maxTokens = 1024
 }) {
+    const config = getEvonConfig();
+
     if (!Array.isArray(messages) || messages.length === 0) {
         return {
             success: false,
             content: "",
-            model: DEFAULT_EVON_MODEL,
+            model: config.model,
             isMock: false,
             error: "Messages array cannot be empty"
         };
@@ -212,7 +258,7 @@ export async function generateEvonChatCompletion({
         return {
             success: false,
             content: "",
-            model: DEFAULT_EVON_MODEL,
+            model: config.model,
             isMock: false,
             error: "CRITICAL CONFIGURATION ERROR: Live Evon 30B credentials are required in production."
         };
@@ -224,7 +270,7 @@ export async function generateEvonChatCompletion({
         return {
             success: true,
             content: simulatedText,
-            model: `${DEFAULT_EVON_MODEL} (simulated)`,
+            model: `${config.model} (simulated)`,
             isMock: true,
             usage: {
                 prompt_tokens: 150,
@@ -249,18 +295,18 @@ export async function generateEvonChatCompletion({
     }
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    const timeoutId = setTimeout(() => controller.abort(), config.timeoutMs);
 
     try {
-        const response = await fetch(EVON_API_URL, {
+        const response = await fetch(config.apiUrl, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
-                Authorization: `Bearer ${EVON_API_KEY}`,
-                "X-API-Key-ID": EVON_API_KEY // Supports both standard Bearer and Gnani API key headers
+                Authorization: `Bearer ${config.apiKey}`,
+                "X-API-Key-ID": config.apiKey // Supports both standard Bearer and Gnani API key headers
             },
             body: JSON.stringify({
-                model: DEFAULT_EVON_MODEL,
+                model: config.model,
                 messages: formattedMessages,
                 temperature,
                 max_tokens: maxTokens
@@ -283,7 +329,7 @@ export async function generateEvonChatCompletion({
             return {
                 success: false,
                 content: "",
-                model: DEFAULT_EVON_MODEL,
+                model: config.model,
                 isMock: false,
                 error: errorDetail
             };
@@ -300,7 +346,7 @@ export async function generateEvonChatCompletion({
             return {
                 success: false,
                 content: "",
-                model: DEFAULT_EVON_MODEL,
+                model: config.model,
                 isMock: false,
                 error: "Evon API returned an empty completion"
             };
@@ -309,7 +355,7 @@ export async function generateEvonChatCompletion({
         return {
             success: true,
             content: content.trim(),
-            model: data.model || DEFAULT_EVON_MODEL,
+            model: data.model || config.model,
             isMock: false,
             usage: data.usage || null
         };
@@ -319,16 +365,16 @@ export async function generateEvonChatCompletion({
             return {
                 success: false,
                 content: "",
-                model: DEFAULT_EVON_MODEL,
+                model: config.model,
                 isMock: false,
-                error: `Evon 30B API request timed out after ${REQUEST_TIMEOUT_MS / 1000} seconds`
+                error: `Evon 30B API request timed out after ${config.timeoutMs / 1000} seconds`
             };
         }
         console.error("[EvonService] Request exception:", err);
         return {
             success: false,
             content: "",
-            model: DEFAULT_EVON_MODEL,
+            model: config.model,
             isMock: false,
             error: err.message || "Failed to communicate with Evon 30B service"
         };
@@ -339,5 +385,6 @@ export default {
     generateEvonChatCompletion,
     generateSimulatedEvonResponse,
     isEvonConfigured,
+    getEvonConfig,
     DEFAULT_EVON_MODEL
 };

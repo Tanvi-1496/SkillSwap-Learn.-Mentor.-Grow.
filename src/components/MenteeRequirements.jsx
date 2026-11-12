@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { supabase } from "../lib/supabase";
+import { API_URL } from "../lib/api";
 
 export default function MenteeRequirements({ onNavigate }) {
     const [skills, setSkills] = useState([]);
@@ -55,7 +56,7 @@ export default function MenteeRequirements({ onNavigate }) {
             }
 
             const response = await fetch(
-                "https://skillswap-backend-8g8p.onrender.com/profile",
+                `${API_URL}/profile`,
                 {
                     method: "PUT",
                     headers: {

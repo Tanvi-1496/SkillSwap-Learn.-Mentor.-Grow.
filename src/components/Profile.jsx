@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
+import { API_URL } from "../lib/api";
 
 function getInitials(name) {
     if (!name || typeof name !== "string") return "U";
@@ -34,7 +35,7 @@ export default function Profile({ onNavigate }) {
                     return;
                 }
 
-                const response = await fetch("https://skillswap-backend-8g8p.onrender.com/profile", {
+                const response = await fetch(`${API_URL}/profile`, {
                     headers: {
                         Authorization: `Bearer ${session.access_token}`
                     }

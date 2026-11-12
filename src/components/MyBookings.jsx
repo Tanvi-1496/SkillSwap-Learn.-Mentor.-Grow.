@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
+import { API_URL } from "../lib/api";
 import SessionDetailsModal from "./SessionDetailsModal";
 
 function formatTimeDisplay(timeStr) {
@@ -68,7 +69,7 @@ export default function MyBookings({ onNavigate }) {
                 console.warn("Could not determine user role:", roleErr);
             }
 
-            const response = await fetch("https://skillswap-backend-8g8p.onrender.com/bookings", {
+            const response = await fetch(`${API_URL}/bookings`, {
                 headers: {
                     Authorization: `Bearer ${session.access_token}`
                 }
@@ -122,7 +123,7 @@ export default function MyBookings({ onNavigate }) {
                 return;
             }
 
-            const response = await fetch(`https://skillswap-backend-8g8p.onrender.com/bookings/${bookingId}`, {
+            const response = await fetch(`${API_URL}/bookings/${bookingId}`, {
                 method: "PATCH",
                 headers: {
                     "Content-Type": "application/json",
@@ -174,7 +175,7 @@ export default function MyBookings({ onNavigate }) {
                 return;
             }
 
-            const response = await fetch(`https://skillswap-backend-8g8p.onrender.com/bookings/${bookingId}`, {
+            const response = await fetch(`${API_URL}/bookings/${bookingId}`, {
                 method: "PATCH",
                 headers: {
                     "Content-Type": "application/json",
