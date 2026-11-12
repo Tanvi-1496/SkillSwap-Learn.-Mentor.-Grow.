@@ -9,3 +9,4 @@ backend/.env
 ai/aiml/api/.env
 __pycache__/
 *.pyc
+.env.example
