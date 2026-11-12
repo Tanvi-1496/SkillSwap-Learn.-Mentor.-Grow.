@@ -14,6 +14,7 @@ import bookingRoutes from "./routes/bookings.js";
 import adminRoutes from "./routes/admin.js";
 import reviewRoutes from "./routes/reviews.js";
 import chatbotRoutes from "./routes/chatbot.js";
+import sessionRoutes from "./routes/sessions.js";
 
 dotenv.config();
 
@@ -32,6 +33,7 @@ app.use("/admin", adminRoutes);
 app.use("/reviews", reviewRoutes);
 app.use("/moderation", moderationRoutes);
 app.use("/chatbot", chatbotRoutes);
+app.use("/sessions", sessionRoutes);
 
 // Health check
 app.get("/", (req, res) => {

@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.116.0",
+    "@zegocloud/zego-uikit-prebuilt": "2.18.5",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },

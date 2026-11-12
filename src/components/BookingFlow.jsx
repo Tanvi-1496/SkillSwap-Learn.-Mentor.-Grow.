@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { API_URL } from "../lib/api";
+import { getDateForWeekday, getWeekdayForDate, isSlotBookable } from "./bookingDateUtils";
 
 function normalizeSlotTo24h(slotStr) {
     if (!slotStr) return "";
@@ -41,6 +42,12 @@ export default function BookingFlow({ onNavigate, mentorId }) {
     const [bookedSlots, setBookedSlots] = useState([]);
     const [bookingError, setBookingError] = useState(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [now, setNow] = useState(() => new Date());
+
+    useEffect(() => {
+        const intervalId = setInterval(() => setNow(new Date()), 30_000);
+        return () => clearInterval(intervalId);
+    }, []);
 
     useEffect(() => {
         if (!mentorId) return;
@@ -59,6 +66,16 @@ export default function BookingFlow({ onNavigate, mentorId }) {
     const availableDays = availability.filter(
         (item) => item.slots && item.slots.length > 0
     );
+    const availableDates = availableDays
+        .map((item) => ({ ...item, date: getDateForWeekday(item.day, now) }))
+        .filter((item) => item.date);
+
+    useEffect(() => {
+        if (selectedDate && !availableDates.some((item) => item.date === selectedDate)) {
+            setSelectedDate("");
+            setSelectedTime("");
+        }
+    }, [selectedDate, now, mentor]);
 
     const topics = mentor?.skills?.length
         ? [
@@ -78,7 +95,10 @@ export default function BookingFlow({ onNavigate, mentorId }) {
 
     const canNext = () => {
         if (step === 1) return !!selectedDate;
-        if (step === 2) return !!selectedTime;
+        if (step === 2) {
+            return !!selectedTime &&
+                isSlotBookable(selectedDate, normalizeSlotTo24h(selectedTime), now);
+        }
         if (step === 3) return !!selectedTopic;
         if (step === 4) return requirements.length > 10;
         return true;
@@ -100,44 +120,16 @@ export default function BookingFlow({ onNavigate, mentorId }) {
         if (step > 1) setStep(step - 1);
     };
 
-    const getNextDateForDay = (dayName) => {
-        const days = [
-            "Sunday",
-            "Monday",
-            "Tuesday",
-            "Wednesday",
-            "Thursday",
-            "Friday",
-            "Saturday",
-        ];
-
-        const today = new Date();
-        const targetDay = days.indexOf(dayName);
-        const currentDay = today.getDay();
-
-        let diff = targetDay - currentDay;
-
-        if (diff <= 0) {
-            diff += 7;
-        }
-
-        const result = new Date(today);
-        result.setDate(today.getDate() + diff);
-
-        const y = result.getFullYear();
-        const m = String(result.getMonth() + 1).padStart(2, "0");
-        const d = String(result.getDate()).padStart(2, "0");
-        return `${y}-${m}-${d}`;
-    };
-
     // Whenever selectedDate changes, fetch already-booked slots for that mentor on that date
     useEffect(() => {
         if (!mentorId || !selectedDate) {
             setBookedSlots([]);
             return;
         }
-        const bDate = getNextDateForDay(selectedDate);
-        fetch(`${API_URL}/bookings/slots?mentor_id=${mentorId}&date=${bDate}`)
+        setBookedSlots([]);
+        const controller = new AbortController();
+        const params = new URLSearchParams({ mentor_id: mentorId, date: selectedDate });
+        fetch(`${API_URL}/bookings/slots?${params}`, { signal: controller.signal })
             .then((res) => (res.ok ? res.json() : null))
             .then((data) => {
                 if (data?.bookedSlots) {
@@ -146,11 +138,14 @@ export default function BookingFlow({ onNavigate, mentorId }) {
                     setBookedSlots([]);
                 }
             })
-            .catch(() => setBookedSlots([]));
+            .catch((error) => {
+                if (error.name !== "AbortError") setBookedSlots([]);
+            });
+        return () => controller.abort();
     }, [mentorId, selectedDate]);
 
-    const handleSelectDate = (dayName) => {
-        setSelectedDate(dayName);
+    const handleSelectDate = (date) => {
+        setSelectedDate(date);
         setSelectedTime("");
     };
 
@@ -167,6 +162,12 @@ export default function BookingFlow({ onNavigate, mentorId }) {
                 return;
             }
 
+            if (!isSlotBookable(selectedDate, normalizeSlotTo24h(selectedTime), new Date())) {
+                setBookingError("This time slot has passed. Please choose another time.");
+                setIsSubmitting(false);
+                return;
+            }
+
             const { data: { session }, error: sessionError } = await supabase.auth.getSession();
             const token = session?.access_token;
 
@@ -175,8 +176,6 @@ export default function BookingFlow({ onNavigate, mentorId }) {
                 setIsSubmitting(false);
                 return;
             }
-
-            const bookingDate = getNextDateForDay(selectedDate);
 
             const response = await fetch(`${API_URL}/bookings`, {
                 method: "POST",
@@ -187,7 +186,7 @@ export default function BookingFlow({ onNavigate, mentorId }) {
                 body: JSON.stringify({
                     mentor_id: mentorId,
                     topic: selectedTopic,
-                    date: bookingDate,
+                    date: selectedDate,
                     time: selectedTime,
                 }),
             });
@@ -228,7 +227,7 @@ export default function BookingFlow({ onNavigate, mentorId }) {
                     <div className="bg-[#F5F7FC] rounded-2xl p-5 text-left space-y-3 mb-6 border border-[#E5E7EB]">
                         {[
                             { label: "Mentor", val: mentor?.name || "Mentor" },
-                            { label: "Date", val: `${selectedDate} (${getNextDateForDay(selectedDate)})` },
+                            { label: "Date", val: `${getWeekdayForDate(selectedDate)} (${selectedDate})` },
                             { label: "Time", val: selectedTime },
                             { label: "Topic", val: selectedTopic },
                             { label: "Duration", val: "60 minutes" },
@@ -326,19 +325,19 @@ export default function BookingFlow({ onNavigate, mentorId }) {
                                 <h3 className="text-lg font-semibold text-[#172033] mb-4">Choose a date</h3>
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                                     {availableDays.length ? (
-                                        availableDays.map((day) => (
+                                        availableDates.map((day) => (
                                             <button
-                                                key={day.day}
+                                                key={day.date}
                                                 type="button"
-                                                onClick={() => handleSelectDate(day.day)}
+                                                onClick={() => handleSelectDate(day.date)}
                                                 className={`rounded-2xl border p-4 text-left transition cursor-pointer ${
-                                                    selectedDate === day.day
+                                                    selectedDate === day.date
                                                         ? "border-[#4F46E5] bg-[#EEF0FF] text-[#4F46E5] shadow-xs"
                                                         : "border-[#E5E7EB] bg-white hover:border-slate-300 text-[#172033]"
                                                 }`}
                                             >
                                                 <div className="font-semibold">{day.day}</div>
-                                                <div className="text-xs text-[#718096] mt-0.5">{getNextDateForDay(day.day)}</div>
+                                                <div className="text-xs text-[#718096] mt-0.5">{day.date}</div>
                                                 <div className="text-sm text-[#718096] mt-1">{day.slots?.length || 0} slots available</div>
                                             </button>
                                         ))
@@ -355,9 +354,14 @@ export default function BookingFlow({ onNavigate, mentorId }) {
                             <div>
                                 <h3 className="text-lg font-semibold text-[#172033] mb-4">Choose a time</h3>
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                                    {availableDays
-                                        .filter((day) => day.day === selectedDate)
+                                    {availableDates
+                                        .filter((day) => day.date === selectedDate)
                                         .flatMap((day) => day.slots || [])
+                                        .filter((slot) => isSlotBookable(
+                                            selectedDate,
+                                            normalizeSlotTo24h(slot),
+                                            now
+                                        ))
                                         .map((slot) => {
                                             const isBooked = bookedSlots.includes(normalizeSlotTo24h(slot));
                                             return (
@@ -379,7 +383,7 @@ export default function BookingFlow({ onNavigate, mentorId }) {
                                             );
                                         })}
                                 </div>
-                                {!availableDays.some((day) => day.day === selectedDate) && (
+                                {!availableDates.some((day) => day.date === selectedDate) && (
                                     <p className="text-sm text-[#718096] mt-3">Please select a date first.</p>
                                 )}
                             </div>
@@ -437,7 +441,7 @@ export default function BookingFlow({ onNavigate, mentorId }) {
                                     </div>
                                     <div className="flex items-center justify-between">
                                         <span className="text-[#718096]">Date</span>
-                                        <span className="font-semibold text-[#172033]">{selectedDate} ({getNextDateForDay(selectedDate)})</span>
+                                        <span className="font-semibold text-[#172033]">{getWeekdayForDate(selectedDate)} ({selectedDate})</span>
                                     </div>
                                     <div className="flex items-center justify-between">
                                         <span className="text-[#718096]">Time</span>
