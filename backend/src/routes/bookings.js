@@ -665,6 +665,10 @@ router.patch("/:id", authMiddleware, async (req, res) => {
 export const transcriptMemoryStore = new Map();
 
 export async function getTranscriptRecord(bookingId) {
+    if (!bookingId) return null;
+    if (process.env.NODE_ENV === "test" && transcriptMemoryStore.has(bookingId)) {
+        return transcriptMemoryStore.get(bookingId);
+    }
     try {
         const { data, error } = await supabase
             .from("session_transcripts")
@@ -680,6 +684,38 @@ export async function getTranscriptRecord(bookingId) {
         // Table not ready or network issue; fallback to in-memory store
     }
     return transcriptMemoryStore.get(bookingId) || null;
+}
+
+export async function getTranscriptByJobId(jobId) {
+    if (!jobId) return null;
+    if (process.env.NODE_ENV === "test") {
+        for (const [_, record] of transcriptMemoryStore.entries()) {
+            if (record.provider_job_id === jobId) {
+                return record;
+            }
+        }
+    }
+    try {
+        const { data, error } = await supabase
+            .from("session_transcripts")
+            .select("*")
+            .eq("provider_job_id", jobId)
+            .maybeSingle();
+
+        if (!error && data) {
+            transcriptMemoryStore.set(data.booking_id, data);
+            return data;
+        }
+    } catch (e) {
+        // Fallback to in-memory store
+    }
+
+    for (const [_, record] of transcriptMemoryStore.entries()) {
+        if (record.provider_job_id === jobId) {
+            return record;
+        }
+    }
+    return null;
 }
 
 export async function upsertTranscriptRecord(bookingId, recordData) {
@@ -1065,6 +1101,8 @@ router.get("/:id/transcript", authMiddleware, async (req, res) => {
             student_consent: transcript.student_consent || false,
             mentor_consent: transcript.mentor_consent || false,
             consent_confirmed: transcript.consent_confirmed || false,
+            diarization: transcript.diarization || null,
+            provider_job_id: transcript.provider_job_id || null,
             safety_moderation: safetyInfo,
             error_message: transcript.error_message || null,
             audio_filename: transcript.audio_filename || null,

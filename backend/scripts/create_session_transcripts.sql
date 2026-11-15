@@ -16,6 +16,12 @@ CREATE TABLE IF NOT EXISTS public.session_transcripts (
     audio_mimetype VARCHAR(100),
     audio_size_bytes INTEGER,
     audio_duration_seconds NUMERIC(6, 2),
+    provider_job_id VARCHAR(100),
+    diarization JSONB,
+    finalization_lock BOOLEAN DEFAULT FALSE,
+    retry_count INTEGER DEFAULT 0,
+    moderated_at TIMESTAMPTZ,
+    insights_generated_at TIMESTAMPTZ,
     
     -- Two-Party Consent tracking: Both student and mentor must explicitly consent
     student_consent BOOLEAN NOT NULL DEFAULT FALSE,
@@ -35,6 +41,9 @@ ON public.session_transcripts(booking_id);
 
 CREATE INDEX IF NOT EXISTS idx_session_transcripts_status 
 ON public.session_transcripts(status);
+
+CREATE INDEX IF NOT EXISTS idx_session_transcripts_provider_job_id 
+ON public.session_transcripts(provider_job_id);
 
 -- 3. Row-Level Security (RLS) policies
 -- Transcripts can only be read by:
@@ -64,3 +73,8 @@ USING (
           )
     )
 );
+
+-- 4. Explicit permissions
+REVOKE ALL ON public.session_transcripts FROM anon, authenticated;
+GRANT SELECT ON public.session_transcripts TO authenticated;
+GRANT ALL ON public.session_transcripts TO service_role;

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { API_URL } from "../lib/api";
 import SessionDetailsModal from "./SessionDetailsModal";
+import LiveSessionModal from "./LiveSessionModal";
 
 const navItems = [
     { id: "dashboard", label: "Dashboard", icon: "🏠" },
@@ -172,6 +173,7 @@ export default function MentorDashboard({ onNavigate, initialTab }) {
     const [bookingFeedback, setBookingFeedback] = useState(null);
     const [mentorReviews, setMentorReviews] = useState([]);
     const [selectedSessionForModal, setSelectedSessionForModal] = useState(null);
+    const [selectedLiveSession, setSelectedLiveSession] = useState(null);
     const [currentMentorUser, setCurrentMentorUser] = useState(null);
 
     const loadMentorData = async () => {
@@ -877,6 +879,13 @@ export default function MentorDashboard({ onNavigate, initialTab }) {
                                                 </div>
                                                 <div className="mt-3 flex gap-2">
                                                     <button
+                                                        onClick={() => setSelectedLiveSession(s)}
+                                                        className="text-xs font-semibold bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200/60 px-3.5 py-1.5 rounded-xl transition-colors cursor-pointer flex items-center gap-1.5"
+                                                    >
+                                                        <span>🎥</span>
+                                                        <span>Join Live Session</span>
+                                                    </button>
+                                                    <button
                                                         onClick={() => setSelectedSessionForModal(s)}
                                                         className="text-xs font-semibold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/60 px-3.5 py-1.5 rounded-xl transition-colors cursor-pointer flex items-center gap-1.5"
                                                     >
@@ -1319,5 +1328,12 @@ export default function MentorDashboard({ onNavigate, initialTab }) {
                     onBookingUpdated={loadBookings}
                 />
             )}
+        {selectedLiveSession && (
+            <LiveSessionModal
+                booking={selectedLiveSession}
+                onClose={() => setSelectedLiveSession(null)}
+                onBookingUpdated={loadBookings}
+            />
+        )}
         </div>);
 }

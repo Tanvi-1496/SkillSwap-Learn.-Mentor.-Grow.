@@ -18,7 +18,7 @@ logger = logging.getLogger("skillswap_ai")
 load_dotenv()
 
 SUPABASE_URL = (os.getenv("SUPABASE_URL") or "").strip()
-SUPABASE_KEY = (os.getenv("SUPABASE_KEY") or "").strip()
+SUPABASE_KEY = (os.getenv("SUPABASE_KEY") or os.getenv("SUPABASE_SERVICE_ROLE_KEY") or "").strip()
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 

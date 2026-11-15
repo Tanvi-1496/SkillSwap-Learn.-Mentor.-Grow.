@@ -14,10 +14,16 @@ import bookingRoutes from "./routes/bookings.js";
 import adminRoutes from "./routes/admin.js";
 import reviewRoutes from "./routes/reviews.js";
 import chatbotRoutes from "./routes/chatbot.js";
+import sessionRoutes from "./routes/sessions.js";
 
 dotenv.config();
 
 const app = express();
+
+// Secure reverse proxy support for rate-limiting and client IP detection
+if (process.env.TRUST_PROXY === "true" || process.env.TRUST_PROXY === "1") {
+    app.set("trust proxy", 1);
+}
 
 app.use(cors());
 app.use(express.json());
@@ -32,6 +38,7 @@ app.use("/admin", adminRoutes);
 app.use("/reviews", reviewRoutes);
 app.use("/moderation", moderationRoutes);
 app.use("/chatbot", chatbotRoutes);
+app.use("/sessions", sessionRoutes);
 
 // Health check
 app.get("/", (req, res) => {

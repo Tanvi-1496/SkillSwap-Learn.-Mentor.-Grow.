@@ -85,6 +85,7 @@ SkillSwap is structured as a coordinated tripartite system:
 - **Mentor Directory & Filtering:** Search by keyword, domain (Web, AI/ML, Cloud, Data), experience level, and ratings.
 - **Frictionless Booking:** Reserve 1-on-1 mentorship slots directly on available calendar intervals.
 - **Bookings Management:** Track pending, confirmed, completed, and canceled sessions.
+- **Live Mentorship:** Join private, booking-linked video calls with in-call chat and screen sharing.
 - **Reviews & Ratings:** Leave star ratings and structured feedback after completing sessions.
 
 ### 💼 For Mentors
@@ -96,6 +97,26 @@ SkillSwap is structured as a coordinated tripartite system:
 - **Admin Dashboard:** Platform-wide analytics (user counts, booking conversion rates, active mentors).
 - **Mentor Verification:** Audit and approve pending mentor profile credentials.
 - **User Management & Audit Logs:** Monitor platform activity and manage account statuses.
+
+### Live mentorship sessions (ZEGOCLOUD)
+
+Confirmed bookings can be joined from the mentee dashboard, mentor dashboard, or My Bookings. Only the assigned student and mentor—verified against the booking and trusted `users.role` record—can receive a room-scoped ZEGOCLOUD Token04. Join opens 15 minutes before the booking time and closes two hours after it, using **Asia/Kolkata** because bookings do not store a timezone. Leaving a call does not complete the booking; the mentor's **End session** action marks it complete, while the existing booking workflow remains available.
+
+1. Apply [`backend/scripts/create_live_sessions.sql`](./backend/scripts/create_live_sessions.sql) in the Supabase SQL editor after the core `bookings` table exists. The migration grants participants read-only access to session metadata; the backend service role performs writes.
+2. Set `ZEGOCLOUD_APP_ID` and `ZEGOCLOUD_SERVER_SECRET` in `backend/.env` from your ZEGOCLOUD project. The server secret must be a 32-byte value and must never be added to a `VITE_` variable or sent to the browser. The backend issues room-bound tokens that expire at the session deadline and rate-limits join-token requests. The default limiter is process-local; use a shared `express-rate-limit` store when deploying multiple backend replicas.
+3. Restart the backend. Both users must sign in with their assigned accounts and the booking must be confirmed. Video access also requires a secure browser context (HTTPS in production; localhost is suitable for local development) and camera/microphone permissions.
+
+Run the isolated, mocked session tests from `backend/` with `pnpm run test:live-sessions`; they do not call Supabase or ZEGOCLOUD.
+
+The web [Call Kit](https://www.zegocloud.com/docs/uikit/callkit-web/overview) includes video, pre-join device controls, chat, participant list, and screen sharing. In Phase 2C, SkillSwap integrates automated dual-track browser audio capture and AI transcription:
+
+- **Two-Party Consent Enforcement:** Both the student and mentor must grant explicit recording consent in the call UI before recording begins. Real-time in-room signaling synchronizes consent state across peers.
+- **Dual-Track Audio Mixing & WAV Encoding:** Local microphone audio and remote participant audio tracks are mixed in real-time using the browser Web Audio API (`AudioContext`). When the session ends, the audio is decoded and resampled into a 16-bit 16kHz PCM WAV file (`audio/wav`) to meet Gnani Vachana STT provider format specifications.
+- **Gnani.ai Batch Transcription:** The recorded session is automatically submitted to the Gnani Vachana Prisma v3 Batch Jobs API, supporting direct upload ($\le 10$ MB) and presigned cloud upload ($> 10$ MB up to 100 MB) with speaker diarization (Mentor vs. Student separation).
+- **AI Session Intelligence & Safety Moderation:** Following transcription, the conversation is automatically evaluated for safety policy violations and ingested by Gnani Evon 30B to generate structured takeaways (summary, key discussion points, learning takeaways, interactive action items, and next steps).
+- **Manual Upload Fallback:** The manual audio upload and consent tab in the Session Details modal remains fully operational for custom short recordings.
+
+ZEGOCLOUD Token04 credentials are not revocable by this app: ending early closes connected clients and prevents new tokens, but an already-issued token remains usable until the scheduled deadline. Provider-side immediate room revocation is not implemented.
 
 ---
 
@@ -136,6 +157,7 @@ SkillSwap/
 │       ├── MentorProfile.jsx     # Detailed mentor profile view
 │       ├── BookingFlow.jsx       # Date/time slot booking wizard
 │       ├── MyBookings.jsx        # User session history & status management
+│       ├── LiveSessionModal.jsx  # Booking-authorized ZEGOCLOUD call UI
 │       ├── MentorDashboard.jsx   # Mentor dashboard & schedule control
 │       ├── AdminDashboard.jsx    # System metrics & mentor verification
 │       ├── Feedback.jsx          # Session review and rating component
@@ -145,6 +167,7 @@ SkillSwap/
 │   ├── .env                      # Backend environment variables
 │   ├── package.json              # Backend dependencies
 │   ├── scripts/
+│   │   ├── create_live_sessions.sql # Live session metadata and RLS
 │   │   ├── seedMentors.js        # Seed script for demo mentors
 │   │   └── seedStudents.js       # Seed script for demo students
 │   └── src/
@@ -154,6 +177,7 @@ SkillSwap/
 │       ├── middleware/
 │       │   └── authMiddleware.js # Supabase JWT verification middleware
 │       ├── routes/
+│       │   ├── sessions.js       # Live session authorization and lifecycle
 │       │   ├── auth.js           # Auth & session routes
 │       │   ├── profile.js        # Profile management & embedding triggers
 │       │   ├── mentor.js         # Mentor queries & availability
@@ -162,6 +186,7 @@ SkillSwap/
 │       │   ├── reviews.js        # Mentor reviews & ratings
 │       │   └── admin.js          # Admin analytics & mentor verification
 │       └── services/
+│           ├── liveSession.js    # Session timing and Token04 generation
 │           └── aiService.js      # HTTP client communicating with FastAPI
 │
 └── ai/                           # 🐍 Python AI / ML Service

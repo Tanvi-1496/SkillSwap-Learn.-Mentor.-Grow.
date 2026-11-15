@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { API_URL } from "../lib/api";
 import SessionDetailsModal from "./SessionDetailsModal";
+import LiveSessionModal from "./LiveSessionModal";
 
 function formatTimeDisplay(timeStr) {
     if (!timeStr) return "";
@@ -36,6 +37,7 @@ export default function MyBookings({ onNavigate }) {
     const [actionFeedback, setActionFeedback] = useState(null);
     const [userRole, setUserRole] = useState("student");
     const [selectedSessionForModal, setSelectedSessionForModal] = useState(null);
+    const [selectedLiveSession, setSelectedLiveSession] = useState(null);
     const [currentAuthUser, setCurrentAuthUser] = useState(null);
 
     const loadBookings = async () => {
@@ -392,6 +394,15 @@ export default function MyBookings({ onNavigate }) {
                                         </div>
                                     </div>
                                     <div className="flex gap-2 mt-4 flex-wrap">
+                                        {b.status === "confirmed" && (
+                                            <button
+                                                onClick={() => setSelectedLiveSession(b)}
+                                                className="text-xs font-semibold bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200/60 px-3.5 py-1.5 rounded-xl transition-colors cursor-pointer flex items-center gap-1.5"
+                                            >
+                                                <span>🎥</span>
+                                                <span>Join Live Session</span>
+                                            </button>
+                                        )}
                                         {tab === "Upcoming" && (
                                             <button
                                                 disabled={completingId === b.id}
@@ -479,6 +490,13 @@ export default function MyBookings({ onNavigate }) {
                     booking={selectedSessionForModal}
                     currentUser={currentAuthUser}
                     onClose={() => setSelectedSessionForModal(null)}
+                    onBookingUpdated={loadBookings}
+                />
+            )}
+            {selectedLiveSession && (
+                <LiveSessionModal
+                    booking={selectedLiveSession}
+                    onClose={() => setSelectedLiveSession(null)}
                     onBookingUpdated={loadBookings}
                 />
             )}
