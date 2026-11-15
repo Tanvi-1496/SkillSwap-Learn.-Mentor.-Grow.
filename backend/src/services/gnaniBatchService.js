@@ -29,6 +29,10 @@ export const DEFAULT_BATCH_MODEL = "prisma-v3.0";
 export const DIRECT_UPLOAD_MAX_BYTES = 10 * 1024 * 1024; // 10 MB ceiling for direct multipart upload
 export const MAX_BATCH_AUDIO_BYTES = 100 * 1024 * 1024; // 100 MB hard safety ceiling
 
+export function getGnaniApiKey() {
+    return (process.env.GNANI_API_KEY || process.env.GNANI_STT_KEY || "").trim();
+}
+
 // In-memory cache for fast lookups & testing (complements persistent database storage)
 export const batchJobsStore = new Map();
 
@@ -162,7 +166,7 @@ export async function createBatchJob({
         }
     }
 
-    const apiKey = (process.env.GNANI_API_KEY || process.env.GNANI_STT_KEY || "").trim();
+    const apiKey = getGnaniApiKey();
     const isProduction = process.env.NODE_ENV === "production";
     const isExplicitMock = process.env.GNANI_MOCK === "true";
     const isTestMode = process.env.NODE_ENV === "test";
@@ -386,7 +390,7 @@ export async function startBatchJob(jobId) {
         return { success: true, jobId, status: "RUNNING", isMock: true };
     }
 
-    const apiKey = (process.env.GNANI_API_KEY || "").trim();
+    const apiKey = getGnaniApiKey();
     try {
         const response = await fetch(`${GNANI_BATCH_BASE_URL}/${jobId}/start`, {
             method: "POST",
@@ -431,7 +435,7 @@ export async function getBatchJobStatus(jobId) {
         return { success: true, jobId, status: currentStatus, isMock: true };
     }
 
-    const apiKey = (process.env.GNANI_API_KEY || "").trim();
+    const apiKey = getGnaniApiKey();
     try {
         const response = await fetch(`${GNANI_BATCH_BASE_URL}/${jobId}`, {
             headers: {
@@ -581,7 +585,7 @@ export async function fetchBatchJobTranscript(jobId, participantOptions = {}) {
         };
     }
 
-    const apiKey = (process.env.GNANI_API_KEY || "").trim();
+    const apiKey = getGnaniApiKey();
     try {
         const fileListRes = await fetch(`${GNANI_BATCH_BASE_URL}/${jobId}/files?status=COMPLETED`, {
             headers: { "X-API-Key-ID": apiKey }

@@ -38,8 +38,8 @@ function isValidUUID(value) {
 }
 
 function getZegoConfig() {
-    const appIdText = process.env.ZEGOCLOUD_APP_ID?.trim() || "";
-    const serverSecret = process.env.ZEGOCLOUD_SERVER_SECRET?.trim() || "";
+    const appIdText = (process.env.ZEGOCLOUD_APP_ID || process.env.ZEGO_APP_ID)?.trim() || "";
+    const serverSecret = (process.env.ZEGOCLOUD_SERVER_SECRET || process.env.ZEGO_SERVER_SECRET)?.trim() || "";
     const appId = Number(appIdText);
 
     if (
