@@ -108,7 +108,13 @@ Confirmed bookings can be joined from the mentee dashboard, mentor dashboard, or
 
 Run the isolated, mocked session tests from `backend/` with `pnpm run test:live-sessions`; they do not call Supabase or ZEGOCLOUD.
 
-The web [Call Kit](https://www.zegocloud.com/docs/uikit/callkit-web/overview) includes video, pre-join device controls, chat, participant list, and screen sharing. Although ZEGOCLOUD's overview lists recording as a feature, the pinned Web package (`@zegocloud/zego-uikit-prebuilt` 2.18.5) exposes no documented recording control or recording-consent callback. ZEGOCLOUD Cloud Recording is a separate service requiring provider activation and storage configuration, so this integration keeps recording **off** and shows that state in the call UI. Use the existing **Audio & Transcript** workflow for short post-session clips: it requires both participants' consent and Gnani transcription is limited to 30 seconds. Full-call cloud recording/transcription is not enabled.
+The web [Call Kit](https://www.zegocloud.com/docs/uikit/callkit-web/overview) includes video, pre-join device controls, chat, participant list, and screen sharing. In Phase 2C, SkillSwap integrates automated dual-track browser audio capture and AI transcription:
+
+- **Two-Party Consent Enforcement:** Both the student and mentor must grant explicit recording consent in the call UI before recording begins. Real-time in-room signaling synchronizes consent state across peers.
+- **Dual-Track Audio Mixing & WAV Encoding:** Local microphone audio and remote participant audio tracks are mixed in real-time using the browser Web Audio API (`AudioContext`). When the session ends, the audio is decoded and resampled into a 16-bit 16kHz PCM WAV file (`audio/wav`) to meet Gnani Vachana STT provider format specifications.
+- **Gnani.ai Batch Transcription:** The recorded session is automatically submitted to the Gnani Vachana Prisma v3 Batch Jobs API, supporting direct upload ($\le 10$ MB) and presigned cloud upload ($> 10$ MB up to 100 MB) with speaker diarization (Mentor vs. Student separation).
+- **AI Session Intelligence & Safety Moderation:** Following transcription, the conversation is automatically evaluated for safety policy violations and ingested by Gnani Evon 30B to generate structured takeaways (summary, key discussion points, learning takeaways, interactive action items, and next steps).
+- **Manual Upload Fallback:** The manual audio upload and consent tab in the Session Details modal remains fully operational for custom short recordings.
 
 ZEGOCLOUD Token04 credentials are not revocable by this app: ending early closes connected clients and prevents new tokens, but an already-issued token remains usable until the scheduled deadline. Provider-side immediate room revocation is not implemented.
 
