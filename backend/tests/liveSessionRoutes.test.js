@@ -417,3 +417,69 @@ test("join endpoint enforces rate limiting after threshold is exceeded", async (
     assert.equal(lastResponse.status, 429);
     assert.match(lastResponse.body.error, /too many/i);
 });
+
+test("auto-transcribe endpoint enforces authentication, authorization, and two-party consent", async () => {
+    // 1. Unauthenticated rejected with 401
+    const unauth = await callSession(`${bookingId}/auto-transcribe`, null, "POST", { audioBase64: "dGVzdA==" });
+    assert.equal(unauth.status, 401);
+
+    // 2. Outsider rejected with 403
+    const outsider = await callSession(`${bookingId}/auto-transcribe`, outsiderToken, "POST", { audioBase64: "dGVzdA==" });
+    assert.equal(outsider.status, 403);
+
+    // 3. Admin rejected with 403
+    const admin = await callSession(`${bookingId}/auto-transcribe`, adminToken, "POST", { audioBase64: "dGVzdA==" });
+    assert.equal(admin.status, 403);
+
+    // 4. Missing audio rejected with 400
+    const noAudio = await callSession(`${bookingId}/auto-transcribe`, studentToken, "POST", { consent: true });
+    assert.equal(noAudio.status, 400);
+
+    // 5. Without both participants' consent rejected with 400
+    const singleConsent = await callSession(`${bookingId}/auto-transcribe`, studentToken, "POST", {
+        audioBase64: Buffer.from("RIFF....WAVEfmt ").toString("base64"),
+        consent: true
+    });
+    assert.equal(singleConsent.status, 400);
+    assert.match(singleConsent.body.error, /Two-party consent requirement not met/);
+
+    // 6. Mentor also consents -> Both consented -> 202 Accepted
+    const wavHeader = Buffer.alloc(44);
+    wavHeader.write("RIFF", 0);
+    wavHeader.writeUInt32LE(36 + 16000, 4);
+    wavHeader.write("WAVE", 8);
+    wavHeader.write("fmt ", 12);
+    wavHeader.writeUInt32LE(16, 16);
+    wavHeader.writeUInt16LE(1, 20);
+    wavHeader.writeUInt16LE(1, 22);
+    wavHeader.writeUInt32LE(16000, 24);
+    wavHeader.writeUInt32LE(32000, 28);
+    wavHeader.writeUInt16LE(2, 32);
+    wavHeader.writeUInt16LE(16, 34);
+    wavHeader.write("data", 36);
+    wavHeader.writeUInt32LE(16000, 40);
+    const pcmData = Buffer.alloc(16000);
+    const validWav = Buffer.concat([wavHeader, pcmData]);
+
+    const dualConsent = await callSession(`${bookingId}/auto-transcribe`, mentorToken, "POST", {
+        audioBase64: validWav.toString("base64"),
+        fileName: "session_call.wav",
+        mimeType: "audio/wav",
+        consent: true
+    });
+    assert.equal(dualConsent.status, 202);
+    assert.equal(dualConsent.body.success, true);
+    assert.equal(dualConsent.body.status, "processing");
+    assert.ok(dualConsent.body.jobId);
+});
+
+test("webhook endpoint /sessions/webhook/gnani validates payload and returns status", async () => {
+    const invalidRes = await callSession("webhook/gnani", null, "POST", {});
+    assert.equal(invalidRes.status, 400);
+
+    const notFoundRes = await callSession("webhook/gnani", null, "POST", {
+        job_id: "non_existent_job",
+        status: "COMPLETED"
+    });
+    assert.equal(notFoundRes.status, 404);
+});

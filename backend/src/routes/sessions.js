@@ -1,5 +1,10 @@
 import express from "express";
+import crypto from "crypto";
+import fs from "fs";
+import os from "os";
+import path from "path";
 import rateLimit from "express-rate-limit";
+import multer from "multer";
 import supabase from "../config/supabase.js";
 import authMiddleware from "../middleware/authMiddleware.js";
 import {
@@ -9,6 +14,9 @@ import {
     getSessionWindow,
     SESSION_TIME_ZONE
 } from "../services/liveSession.js";
+import { isSupportedAudioFormat } from "../services/gnaniService.js";
+import { createAndProcessBatchJob, handleBatchWebhook } from "../services/gnaniBatchService.js";
+import { getTranscriptRecord, upsertTranscriptRecord } from "./bookings.js";
 
 const router = express.Router();
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -440,6 +448,231 @@ router.post("/:bookingId/end", authMiddleware, async (req, res) => {
     } catch (error) {
         console.error("Live session end request failed:", error);
         return res.status(500).json({ error: "Unable to end live session" });
+    }
+});
+
+// ---------------------------------------------------------------------------
+// Gnani Batch Audio Upload Middleware & Endpoints (Disk Streaming Architecture)
+// ---------------------------------------------------------------------------
+const UPLOAD_TEMP_DIR = path.join(os.tmpdir(), "skillswap_audio_uploads");
+try {
+    if (!fs.existsSync(UPLOAD_TEMP_DIR)) {
+        fs.mkdirSync(UPLOAD_TEMP_DIR, { recursive: true });
+    }
+} catch (e) {
+    console.warn("Failed to create audio upload temp dir:", e.message);
+}
+
+const batchAudioMulter = multer({
+    storage: multer.diskStorage({
+        destination: (req, file, cb) => {
+            cb(null, fs.existsSync(UPLOAD_TEMP_DIR) ? UPLOAD_TEMP_DIR : os.tmpdir());
+        },
+        filename: (req, file, cb) => {
+            const uniqueSuffix = `${Date.now()}_${crypto.randomBytes(6).toString("hex")}`;
+            const ext = path.extname(file.originalname) || ".wav";
+            cb(null, `session_${uniqueSuffix}${ext}`);
+        }
+    }),
+    limits: { fileSize: 100 * 1024 * 1024 }, // 100 MB safe limit
+    fileFilter: (req, file, cb) => {
+        if (!isSupportedAudioFormat(file.originalname, file.mimetype)) {
+            const err = new Error(
+                `Unsupported audio file format: ${file.originalname} (${file.mimetype}). Supported formats: WAV, MP3, M4A, AAC, FLAC, OGG`
+            );
+            err.code = "UNSUPPORTED_FORMAT";
+            return cb(err, false);
+        }
+        cb(null, true);
+    }
+});
+
+const handleBatchAudioUploadMiddleware = (req, res, next) => {
+    batchAudioMulter.fields([
+        { name: "audio", maxCount: 1 },
+        { name: "audio_file", maxCount: 1 }
+    ])(req, res, (err) => {
+        if (err) {
+            if (err.code === "LIMIT_FILE_SIZE") {
+                return res.status(400).json({ error: "Audio file exceeds maximum size limit of 100 MB" });
+            }
+            if (err.code === "UNSUPPORTED_FORMAT") {
+                return res.status(400).json({ error: err.message });
+            }
+            return res.status(400).json({ error: err.message || "Failed to parse audio file upload" });
+        }
+        req.file = req.files?.audio?.[0] || req.files?.audio_file?.[0];
+        next();
+    });
+};
+
+router.post("/:bookingId/auto-transcribe", authMiddleware, handleBatchAudioUploadMiddleware, async (req, res) => {
+    const { bookingId } = req.params;
+    if (!isValidUUID(bookingId)) {
+        return res.status(400).json({ error: "Invalid booking ID" });
+    }
+
+    let filePath = req.file?.path || null;
+
+    try {
+        const context = await getBookingContext(bookingId, req.user.id, res);
+        if (!context) {
+            if (filePath && fs.existsSync(filePath)) {
+                try { fs.unlinkSync(filePath); } catch {}
+            }
+            return;
+        }
+
+        if (context.participantRole === "admin") {
+            if (filePath && fs.existsSync(filePath)) {
+                try { fs.unlinkSync(filePath); } catch {}
+            }
+            return res.status(403).json({ error: "Administrators cannot submit audio recordings for transcription" });
+        }
+
+        const { booking } = context;
+        if (!["confirmed", "completed"].includes(booking.status)) {
+            if (filePath && fs.existsSync(filePath)) {
+                try { fs.unlinkSync(filePath); } catch {}
+            }
+            return res.status(409).json({
+                error: `Cannot transcribe audio for a booking with status "${booking.status}". Only confirmed or completed sessions can be transcribed.`
+            });
+        }
+
+        // Two-party consent verification
+        const existingTranscript = await getTranscriptRecord(bookingId);
+        const isStudent = context.participantRole === "student";
+        const isMentor = context.participantRole === "mentor";
+
+        const callerConsent = req.body?.consent === true || req.body?.consent === "true" || req.body?.consent_confirmed === true;
+        const studentConsent = isStudent ? (callerConsent || !!existingTranscript?.student_consent) : !!existingTranscript?.student_consent;
+        const mentorConsent = isMentor ? (callerConsent || !!existingTranscript?.mentor_consent) : !!existingTranscript?.mentor_consent;
+        const bothConsented = studentConsent && mentorConsent;
+
+        if (!bothConsented) {
+            if (filePath && fs.existsSync(filePath)) {
+                try { fs.unlinkSync(filePath); } catch {}
+            }
+            await upsertTranscriptRecord(bookingId, {
+                student_consent: studentConsent,
+                student_consent_at: studentConsent ? (existingTranscript?.student_consent_at || new Date().toISOString()) : null,
+                mentor_consent: mentorConsent,
+                mentor_consent_at: mentorConsent ? (existingTranscript?.mentor_consent_at || new Date().toISOString()) : null,
+                consent_confirmed: false
+            });
+
+            return res.status(400).json({
+                error: "Two-party consent requirement not met. Both student and mentor must consent to session recording before transcription can proceed.",
+                student_consent: studentConsent,
+                mentor_consent: mentorConsent,
+                missing_consent_from: !studentConsent ? "student" : "mentor"
+            });
+        }
+
+        // Audio extraction: multipart disk file OR base64 payload
+        let fileBuffer = null;
+        let fileName = req.file?.originalname || "session_recording.wav";
+        let mimeType = req.file?.mimetype || "audio/wav";
+
+        if (!filePath && req.body?.audioBase64) {
+            const rawBase64 = String(req.body.audioBase64).replace(/^data:audio\/[a-z0-9]+;base64,/, "");
+            fileBuffer = Buffer.from(rawBase64, "base64");
+            fileName = req.body.fileName || "session_recording.wav";
+            mimeType = req.body.mimeType || "audio/wav";
+        }
+
+        if (!filePath && (!fileBuffer || fileBuffer.length === 0)) {
+            return res.status(400).json({
+                error: "Audio file is required (form-data field 'audio' or 'audio_file', or JSON field 'audioBase64')"
+            });
+        }
+
+        if (!isSupportedAudioFormat(fileName, mimeType)) {
+            if (filePath && fs.existsSync(filePath)) {
+                try { fs.unlinkSync(filePath); } catch {}
+            }
+            return res.status(400).json({
+                error: `Unsupported audio format: ${fileName} (${mimeType}). Supported formats: WAV, MP3, M4A, AAC, FLAC, OGG.`
+            });
+        }
+
+        // Fetch participant names for diarization labels
+        let studentName = "Student";
+        let mentorName = "Mentor";
+        try {
+            const { data: users } = await supabase
+                .from("users")
+                .select("id, name, full_name")
+                .in("id", [booking.student_id, booking.mentor_id]);
+
+            if (users && users.length > 0) {
+                const sUser = users.find((u) => u.id === booking.student_id);
+                const mUser = users.find((u) => u.id === booking.mentor_id);
+                if (sUser?.name || sUser?.full_name) studentName = sUser.name || sUser.full_name;
+                if (mUser?.name || mUser?.full_name) mentorName = mUser.name || mUser.full_name;
+            }
+        } catch {
+            // Non-fatal profile enrichment fallback
+        }
+
+        // Trigger batch transcription job asynchronously with disk cleanup
+        let jobResult;
+        try {
+            jobResult = await createAndProcessBatchJob({
+                bookingId,
+                fileBuffer,
+                filePath,
+                fileName,
+                mimeType,
+                languageCode: req.body?.languageCode || req.body?.language_code,
+                studentName,
+                mentorName,
+                studentId: booking.student_id,
+                mentorId: booking.mentor_id,
+                userId: req.user.id
+            });
+        } finally {
+            // Clean up temporary disk file immediately after upload to Gnani
+            if (filePath && fs.existsSync(filePath)) {
+                try {
+                    fs.unlinkSync(filePath);
+                } catch (cleanupErr) {
+                    console.warn(`[Auto-Transcribe] Could not remove temp file ${filePath}:`, cleanupErr.message);
+                }
+            }
+        }
+
+        if (!jobResult.success) {
+            return res.status(jobResult.statusCode || 500).json({
+                error: jobResult.error || "Failed to submit batch transcription job"
+            });
+        }
+
+        return res.status(202).json({
+            success: true,
+            bookingId,
+            jobId: jobResult.jobId,
+            status: "processing",
+            message: "Transcription job submitted successfully. Processing in background."
+        });
+    } catch (error) {
+        console.error("POST /sessions/:bookingId/auto-transcribe unhandled error:", error);
+        if (filePath && fs.existsSync(filePath)) {
+            try { fs.unlinkSync(filePath); } catch {}
+        }
+        return res.status(500).json({ error: "Internal server error initiating session transcription" });
+    }
+});
+
+router.post("/webhook/gnani", async (req, res) => {
+    try {
+        const providedSecret = req.query?.secret || req.headers["x-gnani-secret"] || req.headers["x-webhook-secret"];
+        const result = await handleBatchWebhook(req.body, providedSecret);
+        return res.status(result.statusCode || (result.success ? 200 : 400)).json(result);
+    } catch (err) {
+        console.error("Gnani webhook error:", err);
+        return res.status(500).json({ error: "Failed to process webhook" });
     }
 });
 
