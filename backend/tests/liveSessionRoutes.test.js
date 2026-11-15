@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import express from "express";
 import http from "node:http";
 
+process.env.NODE_ENV = "test";
 process.env.SUPABASE_URL = "https://test-project.supabase.co";
 process.env.SUPABASE_SERVICE_ROLE_KEY = "live-session-tests-only";
 const { default: supabase } = await import("../src/config/supabase.js");
@@ -11,11 +12,15 @@ const { default: sessionsRouter } = await import("../src/routes/sessions.js");
 const studentId = "11111111-1111-4111-8111-111111111111";
 const mentorId = "22222222-2222-4222-8222-222222222222";
 const outsiderId = "33333333-3333-4333-8333-333333333333";
+const adminId = "99999999-9999-4999-8999-999999999999";
 const bookingId = "44444444-4444-4444-8444-444444444444";
 const expiredBookingId = "55555555-5555-4555-8555-555555555555";
+const cancelledBookingId = "66666666-6666-4666-8666-666666666666";
+const declinedBookingId = "77777777-7777-4777-8777-777777777777";
 const studentToken = "student-test-token";
 const mentorToken = "mentor-test-token";
 const outsiderToken = "outsider-test-token";
+const adminToken = "admin-test-token";
 const testServerSecret = "0123456789abcdef0123456789abcdef";
 
 const originalFrom = supabase.from;
@@ -30,7 +35,8 @@ const records = {
 const usersByToken = new Map([
     [studentToken, { id: studentId }],
     [mentorToken, { id: mentorId }],
-    [outsiderToken, { id: outsiderId }]
+    [outsiderToken, { id: outsiderId }],
+    [adminToken, { id: adminId }]
 ]);
 
 function getSoonBookingTime() {
@@ -160,12 +166,29 @@ before(async () => {
             date: "2020-01-01",
             time: "10:00:00",
             status: "confirmed"
+        },
+        {
+            id: cancelledBookingId,
+            student_id: studentId,
+            mentor_id: mentorId,
+            topic: "Cancelled live session test",
+            ...scheduled,
+            status: "cancelled"
+        },
+        {
+            id: declinedBookingId,
+            student_id: studentId,
+            mentor_id: mentorId,
+            topic: "Declined live session test",
+            ...scheduled,
+            status: "declined"
         }
     ];
     records.users = [
         { id: studentId, role: "student", name: "Test Student" },
         { id: mentorId, role: "mentor", name: "Test Mentor" },
-        { id: outsiderId, role: "student", name: "Other Student" }
+        { id: outsiderId, role: "student", name: "Other Student" },
+        { id: adminId, role: "admin", name: "Platform Admin" }
     ];
     records.live_sessions = [];
 
@@ -206,12 +229,23 @@ after(async () => {
     else process.env.ZEGOCLOUD_SERVER_SECRET = originalServerSecret;
 });
 
-async function callSession(path, token, method = "GET") {
+async function callSession(path, token, method = "GET", body = null, skipRateLimit = true) {
     const response = await fetch(`${baseUrl}/sessions/${path}`, {
         method,
-        headers: token ? { Authorization: `Bearer ${token}` } : {}
+        headers: {
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            ...(body ? { "Content-Type": "application/json" } : {}),
+            ...(skipRateLimit ? { "x-skip-rate-limit": "true" } : {})
+        },
+        ...(body ? { body: JSON.stringify(body) } : {})
     });
-    return { status: response.status, body: await response.json() };
+    let resBody = null;
+    try {
+        resBody = await response.json();
+    } catch {
+        resBody = null;
+    }
+    return { status: response.status, body: resBody };
 }
 
 test("session routes reject unauthenticated and non-participant requests", async () => {
@@ -220,6 +254,105 @@ test("session routes reject unauthenticated and non-participant requests", async
 
     const unauthorized = await callSession(`${bookingId}/join`, outsiderToken, "POST");
     assert.equal(unauthorized.status, 403);
+});
+
+test("all session endpoints strictly reject unauthenticated requests", async () => {
+    const joinRes = await callSession(`${bookingId}/join`, null, "POST");
+    assert.equal(joinRes.status, 401);
+
+    const joinedRes = await callSession(`${bookingId}/joined`, null, "POST");
+    assert.equal(joinedRes.status, 401);
+
+    const leaveRes = await callSession(`${bookingId}/leave`, null, "POST");
+    assert.equal(leaveRes.status, 401);
+
+    const endRes = await callSession(`${bookingId}/end`, null, "POST");
+    assert.equal(endRes.status, 401);
+});
+
+test("outsiders cannot join, participate, leave, or end another user's session", async () => {
+    const getRes = await callSession(bookingId, outsiderToken);
+    assert.equal(getRes.status, 403);
+
+    const joinedRes = await callSession(`${bookingId}/joined`, outsiderToken, "POST");
+    assert.equal(joinedRes.status, 403);
+
+    const leaveRes = await callSession(`${bookingId}/leave`, outsiderToken, "POST");
+    assert.equal(leaveRes.status, 403);
+
+    const endRes = await callSession(`${bookingId}/end`, outsiderToken, "POST");
+    assert.equal(endRes.status, 403);
+});
+
+test("client cannot forge identity, role, or room parameters via request body", async () => {
+    const spoofAttempt = {
+        userId: outsiderId,
+        role: "mentor",
+        roomId: "forged-room-id"
+    };
+
+    const response = await callSession(`${bookingId}/join`, studentToken, "POST", spoofAttempt);
+    assert.equal(response.status, 200);
+    assert.equal(response.body.userId, studentId);
+    assert.equal(response.body.roomId, `skillswap-${bookingId.replace(/-/g, "")}`);
+});
+
+test("ineligible bookings (cancelled and declined) are strictly rejected from joining", async () => {
+    const cancelled = await callSession(`${cancelledBookingId}/join`, studentToken, "POST");
+    assert.equal(cancelled.status, 409);
+
+    const declined = await callSession(`${declinedBookingId}/join`, studentToken, "POST");
+    assert.equal(declined.status, 409);
+});
+
+test("all endpoints reject malformed booking IDs with 400", async () => {
+    const malformedIds = ["not-a-uuid", "12345", "zzzzzzzz-zzzz-zzzz-zzzz-zzzzzzzzzzzz"];
+    for (const badId of malformedIds) {
+        const getRes = await callSession(badId, studentToken);
+        assert.equal(getRes.status, 400);
+
+        const joinRes = await callSession(`${badId}/join`, studentToken, "POST");
+        assert.equal(joinRes.status, 400);
+
+        const joinedRes = await callSession(`${badId}/joined`, studentToken, "POST");
+        assert.equal(joinedRes.status, 400);
+
+        const leaveRes = await callSession(`${badId}/leave`, studentToken, "POST");
+        assert.equal(leaveRes.status, 400);
+
+        const endRes = await callSession(`${badId}/end`, mentorToken, "POST");
+        assert.equal(endRes.status, 400);
+    }
+});
+
+test("authorized admins can audit session status via GET but cannot join, participate, or end", async () => {
+    const auditRes = await callSession(bookingId, adminToken);
+    assert.equal(auditRes.status, 200);
+    assert.equal(auditRes.body.participantRole, "admin");
+    assert.equal(auditRes.body.canJoin, false);
+
+    const joinRes = await callSession(`${bookingId}/join`, adminToken, "POST");
+    assert.equal(joinRes.status, 403);
+
+    const joinedRes = await callSession(`${bookingId}/joined`, adminToken, "POST");
+    assert.equal(joinedRes.status, 403);
+
+    const leaveRes = await callSession(`${bookingId}/leave`, adminToken, "POST");
+    assert.equal(leaveRes.status, 403);
+
+    const endRes = await callSession(`${bookingId}/end`, adminToken, "POST");
+    assert.equal(endRes.status, 403);
+});
+
+test("temporary disconnection preserves active session and permits rejoining", async () => {
+    const leaveRes = await callSession(`${bookingId}/leave`, studentToken, "POST");
+    assert.equal(leaveRes.status, 200);
+    assert.deepEqual(leaveRes.body, { ok: true });
+
+    const statusRes = await callSession(bookingId, studentToken);
+    assert.equal(statusRes.status, 200);
+    assert.equal(statusRes.body.canJoin, true);
+    assert.notEqual(statusRes.body.status, "completed");
 });
 
 test("only confirmed bookings can issue join tokens; session window expiry is enforced", async () => {
@@ -233,15 +366,20 @@ test("only confirmed bookings can issue join tokens; session window expiry is en
     assert.equal(expired.status, 410);
 });
 
-test("missing ZEGOCLOUD credentials fail closed without creating a call room", async () => {
+test("missing ZEGOCLOUD credentials fail closed without creating a call room and sanitize errors", async () => {
+    const previousLength = records.live_sessions.length;
     const secret = process.env.ZEGOCLOUD_SERVER_SECRET;
     delete process.env.ZEGOCLOUD_SERVER_SECRET;
 
-    const response = await callSession(`${bookingId}/join`, studentToken, "POST");
-    assert.equal(response.status, 503);
-    assert.equal(records.live_sessions.length, 0);
-
-    process.env.ZEGOCLOUD_SERVER_SECRET = secret;
+    try {
+        const response = await callSession(`${bookingId}/join`, studentToken, "POST");
+        assert.equal(response.status, 503);
+        assert.equal(records.live_sessions.length, previousLength);
+        assert.equal(response.body.error.includes("ZEGOCLOUD_SERVER_SECRET"), false);
+        assert.equal(response.body.error.includes("ZEGOCLOUD_APP_ID"), false);
+    } finally {
+        process.env.ZEGOCLOUD_SERVER_SECRET = secret;
+    }
 });
 
 test("participants join, observe presence, and only the mentor can end the booking", async () => {
@@ -269,4 +407,13 @@ test("participants join, observe presence, and only the mentor can end the booki
 
     const completed = await callSession(bookingId, studentToken);
     assert.equal(completed.body.status, "completed");
+});
+
+test("join endpoint enforces rate limiting after threshold is exceeded", async () => {
+    let lastResponse;
+    for (let i = 0; i < 11; i++) {
+        lastResponse = await callSession(`${bookingId}/join`, studentToken, "POST", null, false);
+    }
+    assert.equal(lastResponse.status, 429);
+    assert.match(lastResponse.body.error, /too many/i);
 });

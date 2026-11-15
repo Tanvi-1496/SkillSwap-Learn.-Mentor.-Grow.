@@ -1,12 +1,40 @@
+# Dependencies
 node_modules/
+**/node_modules/
+
+# Production build artifacts
 dist/
+dist-ssr/
+build/
+coverage/
+
+# Environment files and credentials
 .env
-.env.local
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+
+# Logs
 *.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# System and Editor files
 .DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Python virtual environment & cache
 venv/
-backend/.env
-ai/aiml/api/.env
+**/venv/
+.venv/
+**/ .venv/
 __pycache__/
-*.pyc
-.env.example
+**/__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/

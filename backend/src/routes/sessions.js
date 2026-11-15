@@ -19,6 +19,9 @@ const joinLimiter = rateLimit({
     limit: 10,
     standardHeaders: true,
     legacyHeaders: false,
+    keyGenerator: (req) => req.user?.id || req.ip,
+    validate: { keyGeneratorIpFallback: false },
+    skip: (req) => process.env.NODE_ENV === "test" && req.headers["x-skip-rate-limit"] === "true",
     message: { error: "Too many session join requests. Please try again shortly." }
 });
 
@@ -51,12 +54,12 @@ function sendDatabaseError(res, error, message = "Live session storage is unavai
     const missingTable = error?.code === "42P01" || error?.code === "PGRST205";
     return res.status(missingTable ? 503 : 500).json({
         error: missingTable
-            ? "Live sessions are not available until the live-session database migration is applied."
+            ? "Live session storage is currently unavailable"
             : message
     });
 }
 
-async function getBookingContext(bookingId, userId, res) {
+async function getBookingContext(bookingId, userId, res, { allowAdmin = false } = {}) {
     const { data: booking, error: bookingError } = await supabase
         .from("bookings")
         .select("id, student_id, mentor_id, topic, date, time, status")
@@ -86,6 +89,9 @@ async function getBookingContext(bookingId, userId, res) {
     }
 
     const participantRole = getBookingParticipantRole(booking, user);
+    if (!participantRole && allowAdmin && user?.role === "admin") {
+        return { booking, participantRole: "admin", user };
+    }
     if (!participantRole) {
         res.status(403).json({ error: "You are not a participant in this booking" });
         return null;
@@ -111,7 +117,7 @@ async function getSessionRecord(bookingId, res) {
 function buildSessionResponse(booking, session, participantRole, now = new Date()) {
     const window = getSessionWindow(booking.date, booking.time);
     const status = getLiveSessionStatus(booking, session, now);
-    const canJoin = ["ready", "waiting", "ongoing"].includes(status);
+    const canJoin = ["ready", "waiting", "ongoing"].includes(status) && participantRole !== "admin";
 
     return {
         bookingId: booking.id,
@@ -183,7 +189,7 @@ router.get("/:bookingId", authMiddleware, async (req, res) => {
     }
 
     try {
-        const context = await getBookingContext(bookingId, req.user.id, res);
+        const context = await getBookingContext(bookingId, req.user.id, res, { allowAdmin: true });
         if (!context) return;
 
         let session = await getSessionRecord(bookingId, res);
@@ -199,7 +205,7 @@ router.get("/:bookingId", authMiddleware, async (req, res) => {
     }
 });
 
-router.post("/:bookingId/join", joinLimiter, authMiddleware, async (req, res) => {
+router.post("/:bookingId/join", authMiddleware, joinLimiter, async (req, res) => {
     const { bookingId } = req.params;
     if (!isValidUUID(bookingId)) {
         return res.status(400).json({ error: "Invalid booking ID" });
@@ -208,6 +214,10 @@ router.post("/:bookingId/join", joinLimiter, authMiddleware, async (req, res) =>
     try {
         const context = await getBookingContext(bookingId, req.user.id, res);
         if (!context) return;
+
+        if (!["student", "mentor"].includes(context.participantRole)) {
+            return res.status(403).json({ error: "Only the student and assigned mentor can join this session" });
+        }
 
         let state;
         try {
@@ -235,8 +245,9 @@ router.post("/:bookingId/join", joinLimiter, authMiddleware, async (req, res) =>
 
         const zegoConfig = getZegoConfig();
         if (!zegoConfig) {
+            console.error("Live video configuration missing or invalid: check ZEGOCLOUD_APP_ID and ZEGOCLOUD_SERVER_SECRET");
             return res.status(503).json({
-                error: "Live video is not configured. Set a valid ZEGOCLOUD_APP_ID and 32-byte ZEGOCLOUD_SERVER_SECRET on the backend."
+                error: "Live video service is temporarily unavailable. Please try again later."
             });
         }
 
@@ -252,14 +263,16 @@ router.post("/:bookingId/join", joinLimiter, authMiddleware, async (req, res) =>
             return res.status(410).json({ error: "This live session is no longer available" });
         }
 
+        const safeUserName =
+            context.user.name?.replace(/[\u0000-\u001f\u007f-\u009f]/g, "").trim().slice(0, 64) ||
+            (context.participantRole === "mentor" ? "Mentor" : "Student");
+
         const token = generateToken04({
             appId: zegoConfig.appId,
             serverSecret: zegoConfig.serverSecret,
             roomId: session.room_id,
             userId: req.user.id,
-            userName:
-                context.user.name?.trim().slice(0, 64) ||
-                (context.participantRole === "mentor" ? "Mentor" : "Student"),
+            userName: safeUserName,
             expiresAt: new Date(currentState.expiresAt)
         });
 
@@ -268,9 +281,7 @@ router.post("/:bookingId/join", joinLimiter, authMiddleware, async (req, res) =>
             token,
             roomId: session.room_id,
             userId: req.user.id,
-            userName:
-                context.user.name?.trim().slice(0, 64) ||
-                (context.participantRole === "mentor" ? "Mentor" : "Student"),
+            userName: safeUserName,
             expiresAt: currentState.expiresAt
         });
     } catch (error) {
@@ -288,6 +299,10 @@ router.post("/:bookingId/joined", authMiddleware, async (req, res) => {
     try {
         const context = await getBookingContext(bookingId, req.user.id, res);
         if (!context) return;
+
+        if (!["student", "mentor"].includes(context.participantRole)) {
+            return res.status(403).json({ error: "Only the student and assigned mentor can participate in this session" });
+        }
 
         const session = await getSessionRecord(bookingId, res);
         if (res.headersSent) return;
@@ -341,6 +356,10 @@ router.post("/:bookingId/leave", authMiddleware, async (req, res) => {
         const context = await getBookingContext(bookingId, req.user.id, res);
         if (!context) return;
 
+        if (!["student", "mentor"].includes(context.participantRole)) {
+            return res.status(403).json({ error: "Only the student and assigned mentor can participate in this session" });
+        }
+
         const session = await getSessionRecord(bookingId, res);
         if (res.headersSent) return;
         if (!session) return res.json({ ok: true });
@@ -349,7 +368,8 @@ router.post("/:bookingId/leave", authMiddleware, async (req, res) => {
         const { error } = await supabase
             .from("live_sessions")
             .update({ [leftField]: new Date().toISOString() })
-            .eq("booking_id", bookingId);
+            .eq("booking_id", bookingId)
+            .eq("status", "active");
 
         if (error) {
             return sendDatabaseError(res, error, "Unable to record session departure");

@@ -45,3 +45,19 @@ USING (
 REVOKE ALL ON public.live_sessions FROM anon, authenticated;
 GRANT SELECT ON public.live_sessions TO authenticated;
 GRANT ALL ON public.live_sessions TO service_role;
+
+-- Ensure updated_at is kept fresh on state changes
+CREATE OR REPLACE FUNCTION public.handle_live_sessions_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS on_live_sessions_updated ON public.live_sessions;
+CREATE TRIGGER on_live_sessions_updated
+    BEFORE UPDATE ON public.live_sessions
+    FOR EACH ROW
+    EXECUTE FUNCTION public.handle_live_sessions_updated_at();
+

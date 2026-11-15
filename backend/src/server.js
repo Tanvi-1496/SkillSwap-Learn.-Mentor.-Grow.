@@ -20,6 +20,11 @@ dotenv.config();
 
 const app = express();
 
+// Secure reverse proxy support for rate-limiting and client IP detection
+if (process.env.TRUST_PROXY === "true" || process.env.TRUST_PROXY === "1") {
+    app.set("trust proxy", 1);
+}
+
 app.use(cors());
 app.use(express.json());
 
